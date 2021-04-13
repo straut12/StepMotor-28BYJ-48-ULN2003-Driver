@@ -133,9 +133,6 @@ if __name__ == "__main__":
     
     #==== MAIN LOOP ====================#
     # MQTT setup is successful. Initialize dictionaries and start the main loop.
-
-    #t1 = Thread(target=bump_watch) # run as seperate thread
-    #t1.start() # start bump watch thread
     
     def motors(command):
         global mach
