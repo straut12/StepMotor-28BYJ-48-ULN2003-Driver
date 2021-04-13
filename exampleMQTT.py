@@ -21,6 +21,8 @@ import sys, logging, json
 from os import path
 from pathlib import Path
 import paho.mqtt.client as mqtt
+from dataclasses import dataclass
+from typing import List
 
 if __name__ == "__main__":
 
@@ -74,19 +76,29 @@ if __name__ == "__main__":
 
     #==== HARDWARE SETUP ===============# 
 
-    # Create list for each motor
-    motor1 = [14,15,18,23]
-    motor2 = [19,13,6,5]
-    delay=.0015 # delay between each sequence step. .001 is the fast the motors would still function
+    @dataclass
+    class StepperMotor:
+        pins: list
+        mode: int
+        step: int
+        speed: list
+        coils: dict
+
+    @dataclass
+    class Machine:
+        stepper: List[StepperMotor]
+        delay: float
+
+    m1 = StepperMotor([14, 15, 18, 23], 0, 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
+    m2 = StepperMotor([19, 13, 6, 5], 0, 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
+
+    mach = Machine([m1, m2], 0.0015)
 
     GPIO.setmode(GPIO.BCM)
-    for pin in motor1:
-        GPIO.setup(pin,GPIO.OUT)
-        logging.info("Motor 1 pin {0} Setup".format(pin))
-
-    for pin in motor2:
-        GPIO.setup(pin,GPIO.OUT)
-        logging.info("Motor 2 pin {0} Setup".format(pin))
+    for i in range(len(mach.stepper)):          # Setup each stepper motor
+        for pin in mach.stepper[i].pins:        # Setup each pin in each stepper
+            GPIO.setup(pin,GPIO.OUT)
+            logging.info("pin {0} Setup".format(pin))
 
     #====   SETUP MQTT =================#
     user_info = get_login_info("stem")
@@ -96,8 +108,6 @@ if __name__ == "__main__":
     MQTT_CLIENT_ID = 'pi4'
     MQTT_SUB_TOPIC1 = 'pi/stepper'
     MQTT_PUB_TOPIC1 = 'pi/stepper/status'
-
-    
 
     #==== START/BIND MQTT FUNCTIONS ====#
     #Create a couple flags to handle a failed attempt at connecting. If user/password is wrong we want to stop the loop.
@@ -128,41 +138,57 @@ if __name__ == "__main__":
     #t1.start() # start bump watch thread
     
     def motors(command):
-        global speed
-        global Harr1, Farr1, arr2 # enables the edit of arr1 var inside a function
-        #global Harr1, Farr1, arr2 # enables the edit of arr1 var inside a function
-        HarrOUT = Harr1[1:]+Harr1[:1] # rotates array values of 1 digit. Change to 3: and :3 for reverse
-        Harr1 = arr2
-        arr2 = HarrOUT
-        FarrOUT = Farr1[1:]+Farr1[:1] # rotates array values of 1 digit. Change to 3: and :3 for reverse
-        Farr1 = FarrOUT
+        global mach
 
-        #HarrOUT = Harr1[1:]+Harr1[:1] # rotates array values of 1 digit. Change to 3: and :3 for reverse
-        #Harr1 = arr2
-        #arr2 = HarrOUT
-        #FarrOUT = Farr1[1:]+Farr1[:1] # rotates array values of 1 digit. Change to 3: and :3 for reverse
-        #Farr1 = FarrOUT
+        for i in range(len(mach.stepper)):          # Setup each stepper motor
+            for rotation in range(2):        # Setup each pin in each stepper
+                if rotation == 0:
+                    mach.stepper[i].coils["HarrOUT"][rotation] = mach.stepper[i].coils["Harr1"][rotation][1:] + mach.stepper[i].coils["Harr1"][rotation][:1]
+                else:
+                    mach.stepper[i].coils["HarrOUT"][rotation] = mach.stepper[i].coils["Harr1"][rotation][3:] + mach.stepper[i].coils["Harr1"][rotation][:3]
+                mach.stepper[i].coils["Harr1"][rotation] = mach.stepper[i].coils["arr2"][rotation]
+                mach.stepper[i].coils["arr2"][rotation] = mach.stepper[i].coils["HarrOUT"][rotation]
+                
+                if rotation == 0:
+                    mach.stepper[i].coils["FarrOUT"][rotation] = mach.stepper[i].coils["Farr1"][rotation][1:] + mach.stepper[i].coils["Farr1"][rotation][:1]
+                else:
+                    mach.stepper[i].coils["FarrOUT"][rotation] = mach.stepper[i].coils["Farr1"][rotation][3:] + mach.stepper[i].coils["Farr1"][rotation][:3]
+                mach.stepper[i].coils["Farr1"][rotation] = mach.stepper[i].coils["FarrOUT"][rotation]
+            mach.stepper[i].speed[0] = mach.stepper[i].coils["FarrOUT"][0]
+            mach.stepper[i].speed[1] = mach.stepper[i].coils["HarrOUT"][0]
+            mach.stepper[i].speed[3] = mach.stepper[i].coils["HarrOUT"][1]
+            mach.stepper[i].speed[4] = mach.stepper[i].coils["FarrOUT"][1]
+            if command["restart"][i] == 1:
+                mach.stepper[i].mode = 0
+                command["restart"][i] = 0
+                logging.debug("Motor:{0} Steps:{1} Mode:{2} Rot:{3} coils:{4}".format(i, mach.stepper[i].step, mach.stepper[i].mode, command["speed"][i], mach.stepper[i].speed[command["speed"][i]]))
+            if command["speed"][i] == 2 or mach.stepper[i].step > 6000 or mach.stepper[i].mode == 1: # motor stopped or completed a revolution
+                #logging.debug("Motor:{0} Steps:{1} Mode:{2} Rot:{3} coils:{4}".format(i, mach.stepper[i].step, command["mode"][i], command["speed"][i], mach.stepper[i].speed[command["speed"][i]]))
+                mach.stepper[i].step = 0
+            else:
+                mach.stepper[i].step += 1
+            if (command["mode"][i] == 1 and mach.stepper[i].step >= command["step"][i]) or mach.stepper[i].mode == 1:    # Stepping mode
+                #logging.debug("Motor:{0} Steps:{1} Mode:{2} Rot:{3} coils:{4}".format(i, mach.stepper[i].step, command["mode"][i], command["speed"][i], mach.stepper[i].speed[command["speed"][i]]))
+                GPIO.output(mach.stepper[i].pins, mach.stepper[i].speed[2])               # Hit step limit, stop
+                mach.stepper[i].mode = 1
+            else:
+                GPIO.output(mach.stepper[i].pins, mach.stepper[i].speed[command["speed"][i]])
+            #logging.debug("Motor:{0} Steps:{1} Mode:{2} Rot:{3} coils:{4}".format(i, mach.stepper[i].step, command["mode"][i], command["speed"][i], mach.stepper[i].speed[command["speed"][i]]))
+        sleep(float(command["delay"])/1000)
 
-        #speed[0] = 
-        #speed[1] = 
-        speed[2] = [0,0,0,0]
-        speed[3] = HarrOUT
-        speed[4] = FarrOUT
-        #logging.debug("Half: {0} | Full: {1}".format(HarrOUT, FarrOUT))
-        GPIO.output(motor1, speed[command["m1"]])
-        GPIO.output(motor2, speed[command["m2"]])
-        sleep(delay)
-    
-    #initialize array for sequence shift
-    Harr1 = [0,1,1,0]
-    Farr1 = Harr1
-    arr2 = [0,1,0,0]
-    arrOUT = []
-    speed = [[0,0,0,0] for i in range(5)]
-    outgoingD, incomingD = {}, {"m1":2, "m2":2}
+    for i in range(len(mach.stepper)):          # Setup each stepper motor
+        mach.stepper[i].speed[2] = [0,0,0,0]
+        for rotation in range(2):        # Setup each pin in each stepper
+            mach.stepper[i].coils["Harr1"][rotation] = [0,1,1,0]
+            mach.stepper[i].coils["Farr1"][rotation] = [0,1,1,0]
+            mach.stepper[i].coils["arr2"][rotation] = [0,1,1,0]
+
+    outgoingD = {}
+    incomingD = {"delay":1.5, "speed":[3,3], "mode":[0,0], "step":[4064, 4064], "restart":[0,0]}
     newmsg = False
     try:
         while True:
+            motors(incomingD)
             if newmsg:                                 # INCOMING: New msg/instructions have been received
                 for key, value in incomingD.items():
                     motor_id = key
@@ -170,7 +196,6 @@ if __name__ == "__main__":
                     outgoingD[motor_id + 'i'] = speed_status      
                 mqtt_client.publish(MQTT_PUB_TOPIC1, json.dumps(outgoingD))
                 newmsg = False                         # Reset the new msg flag
-            motors(incomingD)
     except KeyboardInterrupt:
         logging.info("Pressed ctrl-C")
     finally:
