@@ -16,6 +16,7 @@ IN1,2,3,4
 from time import sleep
 import RPi.GPIO as GPIO
 import sys, logging, json
+from logging.handlers import RotatingFileHandler
 from os import path
 from pathlib import Path
 import paho.mqtt.client as mqtt
@@ -26,17 +27,17 @@ if __name__ == "__main__":
 
     def on_connect(client, userdata, flags, rc):
         """ on connect callback verifies a connection established and subscribe to TOPICs"""
-        logging.info("attempting on_connect")
+        main_logger.info("attempting on_connect")
         if rc==0:
             mqtt_client.connected = True          # If rc = 0 then successful connection
             client.subscribe(MQTT_SUB_TOPIC1)      # Subscribe to topic
             client.subscribe(MQTT_SUB_TOPIC2)
-            logging.info("Successful Connection: {0}".format(str(rc)))
-            logging.info("Subscribed to: {0}\n".format(MQTT_SUB_TOPIC1))
-            logging.info("Subscribed to: {0}\n".format(MQTT_SUB_TOPIC2))
+            main_logger.info("Successful Connection: {0}".format(str(rc)))
+            main_logger.info("Subscribed to: {0}\n".format(MQTT_SUB_TOPIC1))
+            main_logger.info("Subscribed to: {0}\n".format(MQTT_SUB_TOPIC2))
         else:
             mqtt_client.failed_connection = True  # If rc != 0 then failed to connect. Set flag to stop mqtt loop
-            logging.info("Unsuccessful Connection - Code {0}".format(str(rc)))
+            main_logger.info("Unsuccessful Connection - Code {0}".format(str(rc)))
 
     def on_message(client, userdata, msg):
         """on message callback will receive messages from the server/broker. Must be subscribed to the topic in on_connect"""
@@ -47,23 +48,23 @@ if __name__ == "__main__":
             incomingD = json.loads(str(msg.payload.decode("utf-8", "ignore")))  # decode the json msg and convert to python dictionary
             #newmsg = True
             # Debugging. Will print the JSON incoming payload and unpack the converted dictionary
-            #logging.debug("Receive: msg on subscribed topic: {0} with payload: {1}".format(msg.topic, str(msg.payload))) 
-            #logging.debug("Incoming msg converted (JSON->Dictionary) and unpacking")
+            #main_logger.debug("Receive: msg on subscribed topic: {0} with payload: {1}".format(msg.topic, str(msg.payload))) 
+            #main_logger.debug("Incoming msg converted (JSON->Dictionary) and unpacking")
             #for key, value in incomingD.items():
-            #    logging.debug("{0}:{1}".format(key, value))
+            #    main_logger.debug("{0}:{1}".format(key, value))
 
     def on_publish(client, userdata, mid):
         """on publish will send data to broker"""
         #Debugging. Will unpack the dictionary and then the converted JSON payload
-        #logging.debug("msg ID: " + str(mid)) 
-        #logging.debug("Publish: Unpack outgoing dictionary (Will convert dictionary->JSON)")
+        #main_logger.debug("msg ID: " + str(mid)) 
+        #main_logger.debug("Publish: Unpack outgoing dictionary (Will convert dictionary->JSON)")
         #for key, value in outgoingD.items():
-        #    logging.debug("{0}:{1}".format(key, value))
-        #logging.debug("Converted msg published on topic: {0} with JSON payload: {1}\n".format(MQTT_PUB_TOPIC1, json.dumps(outgoingD))) # Uncomment for debugging. Will print the JSON incoming msg
+        #    main_logger.debug("{0}:{1}".format(key, value))
+        #main_logger.debug("Converted msg published on topic: {0} with JSON payload: {1}\n".format(MQTT_PUB_TOPIC1, json.dumps(outgoingD))) # Uncomment for debugging. Will print the JSON incoming msg
         pass 
 
     def on_disconnect(client, userdata,rc=0):
-        logging.debug("DisConnected result code "+str(rc))
+        main_logger.debug("DisConnected result code "+str(rc))
         mqtt_client.loop_stop()
 
     def get_login_info(file):
@@ -73,8 +74,36 @@ if __name__ == "__main__":
             user_info = f.read().splitlines()
         return user_info
 
+    def setup_logging(log_dir):
+        # Create loggers
+        main_logger = logging.getLogger(__name__)
+        main_logger.setLevel(logging.DEBUG)
+        log_file_format = logging.Formatter("[%(levelname)s] - %(asctime)s - %(name)s - : %(message)s in %(pathname)s:%(lineno)d")
+        log_console_format = logging.Formatter("[%(levelname)s]: %(message)s")
+
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(log_console_format)
+
+        exp_file_handler = RotatingFileHandler('{}/exp_debug.log'.format(log_dir), maxBytes=10**6, backupCount=5) # 10MB file
+        exp_file_handler.setLevel(logging.DEBUG)
+        exp_file_handler.setFormatter(log_file_format)
+
+        exp_errors_file_handler = RotatingFileHandler('{}/exp_error.log'.format(log_dir), maxBytes=10**6, backupCount=5)
+        exp_errors_file_handler.setLevel(logging.WARNING)
+        exp_errors_file_handler.setFormatter(log_file_format)
+
+        main_logger.addHandler(console_handler)
+        main_logger.addHandler(exp_file_handler)
+        main_logger.addHandler(exp_errors_file_handler)
+        return main_logger
+
     #==== LOGGING/DEBUGGING ============#
-    logging.basicConfig(level=logging.DEBUG) # Set to CRITICAL to turn logging off. Set to DEBUG to get variables. Set to INFO for status messages.
+
+    #logging.basicConfig(level=logging.DEBUG) # Using RotatingFileHandler instead.
+
+    main_logger = setup_logging(path.dirname(path.abspath(__file__)))
+    main_logger.info("setup logging module")
 
     #==== HARDWARE SETUP ===============# 
 
@@ -110,7 +139,7 @@ if __name__ == "__main__":
             mach.stepper[i].coils["arr2"][rotation] = [0,1,1,0]
         for pin in mach.stepper[i].pins:        # Setup each pin in each stepper
             GPIO.setup(pin,GPIO.OUT)
-            logging.info("pin {0} Setup".format(pin))
+            main_logger.info("pin {0} Setup".format(pin))
 
     #====   SETUP MQTT =================#
     user_info = get_login_info("stem")
@@ -184,7 +213,7 @@ if __name__ == "__main__":
             stepspeed = command["speed"][i]         # stepspeed is a temporary variable for this loop
             if command["mode"][i] == 1 and command["startstep"][i] == 1:
                 startstepping[i] = True
-                logging.debug("2:STRTSTP ON - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
+                main_logger.debug("2:STRTSTP ON - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
                 debug1[i] = True
             if command["mode"][i] == 1 and not startstepping[i]:
                 stepspeed = 2
@@ -193,12 +222,12 @@ if __name__ == "__main__":
                 else:
                     targetstep[i] = FULLREVOLUTION
                 if debug1[i]:
-                    logging.debug("1:MODE1      - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
+                    main_logger.debug("1:MODE1      - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
                     debug1[i] = False
             elif command["mode"][i] == 1 and startstepping[i]:
-                logging.debug("3:STEPPING   - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
+                main_logger.debug("3:STEPPING   - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
                 if abs(mach.stepper[i].step) >= targetstep[i]:
-                    logging.debug("4:DONE-M1OFF - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
+                    main_logger.debug("4:DONE-M1OFF - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
                     startstepping[i] = False
                     command["startstep"][i] = 0
             GPIO.output(mach.stepper[i].pins, mach.stepper[i].speed[stepspeed])
@@ -208,7 +237,7 @@ if __name__ == "__main__":
                 outgoingD['stepsi'] = mach.stepper[i].step
                 mqtt_client.publish(MQTT_PUB_TOPIC1, json.dumps(outgoingD))
             if (abs(mach.stepper[i].step) > FULLREVOLUTION):  # If want to step past full revolution then need to add 'not startstepping'
-                logging.debug("FULL REVOLUTION -- Motor:{0} Steps:{1} Mode:{2} startstepping:{3} coils:{4}".format(i, mach.stepper[i].step, command["mode"][i], startstepping[i], mach.stepper[i].speed[command["speed"][i]]))
+                main_logger.debug("FULL REVOLUTION -- Motor:{0} Steps:{1} Mode:{2} startstepping:{3} coils:{4}".format(i, mach.stepper[i].step, command["mode"][i], startstepping[i], mach.stepper[i].speed[command["speed"][i]]))
                 mach.stepper[i].step = 0
         sleep(float(command["delay"])/1000)
     
@@ -220,7 +249,7 @@ if __name__ == "__main__":
         while True:
             motors(incomingD)
     except KeyboardInterrupt:
-        logging.info("Pressed ctrl-C")
+        main_logger.info("Pressed ctrl-C")
     finally:
         GPIO.cleanup()
-        logging.info("GPIO cleaned up")   
+        main_logger.info("GPIO cleaned up")   
