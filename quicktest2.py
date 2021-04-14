@@ -6,10 +6,10 @@ logging.info("GPIO version: {0}".format(GPIO.VERSION))
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
-M1in1 = 14
-M1in2 = 15
-M1in3 = 18
-M1in4 = 23
+M1in1 = 12
+M1in2 = 16
+M1in3 = 20
+M1in4 = 21
 
 M2in1 = 19
 M2in2 = 13

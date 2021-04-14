@@ -8,14 +8,12 @@ See HARDWARE/MQTT for TOPICS
 
 Wiring
 Motor1
-IN1,2,3,4 = GPIO14,15,18,23
+IN1,2,3,4
 Motor2
-IN1,2,3,4 = 19,13,6,5
+IN1,2,3,4
 """
 
 from time import sleep
-import gpiozero as gpio0
-from threading import Thread
 import RPi.GPIO as GPIO
 import sys, logging, json
 from os import path
@@ -93,11 +91,11 @@ if __name__ == "__main__":
         stepper: List[StepperMotor]
         delay: float    # Future use as separate delay per motor
 
-    m1 = StepperMotor([14, 15, 18, 23], 0, 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
+    m1 = StepperMotor([12, 16, 20, 21], 0, 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
     m2 = StepperMotor([19, 13, 6, 5], 0, 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
     
     GPIO.setmode(GPIO.BCM)
-    FULLREVOLUTION = 4064    # Steps per revolution
+    FULLREVOLUTION = 4076    # Steps per revolution
     DEFAULTDELAY = 1.6       # default delay in msec
     startstepping, targetstep, debug1 = [],[],[]
     mach = Machine([m1, m2], DEFAULTDELAY)
