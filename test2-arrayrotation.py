@@ -30,7 +30,7 @@ logging.basicConfig(level=logging.DEBUG) # Set to CRITICAL to turn logging off. 
 logging.info("GPIO version: {0}".format(GPIO.VERSION))
 
 # Create list for each motor
-motor1 = [14,15,18,23]
+motor1 = [12,16,20,21]
 motor2 = [19,13,6,5]
 delay=.001 # delay between each sequence step. .001 is the fast the motors would still function
 
@@ -49,39 +49,41 @@ for pin in motor2:
   logging.info("Motor 2 pin {0} Setup".format(pin))
 
 #initialize array for sequence shift
-arr1 = [1,1,0,0]
-arr2 = [0,1,0,0]
+arr1 = [0,0,1,1]
 
-def ccw():
-  global arr1 # enables the edit of arr1 var inside a function
-  global arr2 # enables the edit of arr2 var inside a function
-  arrOUT = arr1[1:]+arr1[:1] # rotates array values of 1 digit. Change to 3: and :3 for reverse
-  arr1 = arr2
-  arr2 = arrOUT
-  logging.debug(motor1 + arrOUT)
-  GPIO.output(motor1, arrOUT)
-  GPIO.output(motor2, arrOUT)
-  sleep(delay)
+arr2 = [0,0,0,1] # for clockwise
+arr3 = [0,0,1,0] # for counter clockwise
 
 def cw():
-  global arr1 # enables the edit of arr1 var inside a function
-  global arr2 # enables the edit of arr2 var inside a function
-  logging.debug("arr1: {0}".format(arr1))
-  arrOUT = arr1[3:]+arr1[:3] # rotates array values of 1 digit. Change to 3: and :3 for reverse
-  logging.debug("arrOUT: {0}".format(arrOUT))
-  arr1 = arr2
-  logging.debug("arr1: {0}".format(arr1))
+  global arr1, arr2
+  arrOUT = arr1[-1:]+arr1[:-1] # rotates array values 1 place to the right
+  arr1 = arr2                  
   arr2 = arrOUT
-  
-  logging.debug("arr2: {0}\n".format(arr2))
+  logging.debug(arrOUT)
   GPIO.output(motor1, arrOUT)
-  GPIO.output(motor2, arrOUT)
+  #GPIO.output(motor2, arrOUT)
+  sleep(delay)
+
+def ccw():
+  global arr1, arr3
+  arrOUT = arr1[1:]+arr1[:1] # rotates array values 1 place to the left for reverse. 
+  arr1 = arr3
+  arr3 = arrOUT 
+  logging.debug(arrOUT)
+  GPIO.output(motor1, arrOUT)
+  #GPIO.output(motor2, arrOUT)
   sleep(delay)
 
 # Start main loop
 try:
-  for i in range(7):
+  logging.debug("cw")
+  logging.debug(" 1  2  3  4")
+  for i in range(8):
     cw()
+  logging.debug("ccw")
+  logging.debug(" 1  2  3  4")
+  for i in range(8):
+    ccw()
 except KeyboardInterrupt:
   GPIO.output(motor1, (0,0,0,0))
   GPIO.output(motor2, (0,0,0,0))

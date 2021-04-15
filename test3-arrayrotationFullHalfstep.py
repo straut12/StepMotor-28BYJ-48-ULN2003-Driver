@@ -30,9 +30,9 @@ logging.basicConfig(level=logging.DEBUG) # Set to CRITICAL to turn logging off. 
 logging.info("GPIO version: {0}".format(GPIO.VERSION))
 
 # Create list for each motor
-motor1 = [14,15,18,23]
+motor1 = [12,16,20,21]
 motor2 = [19,13,6,5]
-delay=.0015 # delay between each sequence step. .001 is the fast the motors would still function
+delay=.0016 # delay between each sequence step. .001 is the fast the motors would still function
 
 # Use BCM GPIO references
 # instead of physical pin numbers
@@ -49,40 +49,43 @@ for pin in motor2:
   logging.info("Motor 2 pin {0} Setup".format(pin))
 
 #initialize array for sequence shift
-Harr1 = [0,1,1,0]
-Farr1 = [0,1,1,0]
-arr2 = [0,1,0,0]
+Harr1 = [0,0,1,1]
+Farr1 = [0,0,1,1]
 
-def ccw():
-  global Harr1, Farr1 # enables the edit of arr1 var inside a function
-  global arr2 # enables the edit of arr2 var inside a function
-  HarrOUT = Harr1[1:]+Harr1[:1] # rotates array values of 1 digit. Change to 3: and :3 for reverse
+arr2 = [0,0,0,1] # for clockwise
+arr3 = [0,0,1,0] # for counter clockwise
+
+def cw():
+  global Harr1, Farr1, arr2
+  HarrOUT = Harr1[-1:]+Harr1[:-1] # rotates array values 1 place to the right
   Harr1 = arr2
   arr2 = HarrOUT
-  FarrOUT = Farr1[1:]+Farr1[:1] # rotates array values of 1 digit. Change to 3: and :3 for reverse
+  FarrOUT = Farr1[-1:]+Farr1[:-1] 
   Farr1 = FarrOUT
-  logging.debug("Half: {0} | Full: {1}".format(HarrOUT, FarrOUT))
+  logging.debug("CCW Half:{0} | Full:{1}".format(HarrOUT, FarrOUT))
   GPIO.output(motor1, HarrOUT)
   GPIO.output(motor2, FarrOUT)
   sleep(delay)
 
-def cw():
-  global Harr1, Farr1 # enables the edit of arr1 var inside a function
-  global arr2 # enables the edit of arr2 var inside a function
-  HarrOUT = Harr1[3:]+Harr1[:3] # rotates array values of 1 digit. 
-  Harr1 = arr2
-  arr2 = HarrOUT
-  FarrOUT = Farr1[3:]+Farr1[:3] # rotates array values of 1 digit. 
+def ccw():
+  global Harr1, Farr1, arr3 
+  HarrOUT = Harr1[1:]+Harr1[:1] # rotates array values 1 place to the left for opposite direction
+  Harr1 = arr3
+  arr3 = HarrOUT
+  FarrOUT = Farr1[1:]+Farr1[:1]
   Farr1 = FarrOUT
-  logging.debug("Half: {0} | Full: {1}".format(HarrOUT, FarrOUT))
+  logging.debug("CW  Half:{0} | Full:{1}".format(HarrOUT, FarrOUT))
   GPIO.output(motor1, HarrOUT)
   GPIO.output(motor2, FarrOUT)
   sleep(delay)
 
 # Start main loop
 try:
-  while True:
+  for i in range(1019):
     cw()
+  sleep(0.1)
+  for i in range(1019):
+    ccw()
 except KeyboardInterrupt:
   GPIO.output(motor1, (0,0,0,0))
   GPIO.output(motor2, (0,0,0,0))

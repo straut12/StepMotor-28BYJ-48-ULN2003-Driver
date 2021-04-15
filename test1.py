@@ -16,9 +16,7 @@ M2in2 = 13
 M2in3 = 6
 M2in4 = 5
 
-# adjust if different
-
-StepCount = 4
+StepCount = 8
 
 if StepCount == 4:  # Full step
     delay = 0.0015
@@ -28,12 +26,8 @@ if StepCount == 4:  # Full step
     Seq[1] = [1,1,0,0]
     Seq[2] = [0,1,1,0]
     Seq[3] = [0,0,1,1]
-    #Seq[0] = [1,0,0,1]
-    #Seq[1] = [0,1,0,1]
-    #Seq[2] = [0,1,1,0]
-    #Seq[3] = [1,0,1,0]
 elif StepCount == 8:  # Half step
-    delay = 0.001
+    delay = 0.0015
     StepCount = 8
     Seq = [
         [1,0,0,1],
@@ -82,8 +76,10 @@ if __name__ == '__main__':
     try:
         while True:
             steps = 508
+            logging.debug("CW")
             forward(delay, int(steps))
             steps = 508
+            logging.debug("CCW")
             backwards(delay, int(steps))
     except KeyboardInterrupt:
         setStep(0,0,0,0)
