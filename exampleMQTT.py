@@ -98,9 +98,86 @@ if __name__ == "__main__":
         main_logger.addHandler(exp_errors_file_handler)
         return main_logger
 
+    def stepupdate(spd, stp):
+        if spd == 3:
+            stp += 1
+        elif spd ==4:
+            stp += 2
+        elif spd == 1:
+            stp -= 1
+        elif spd == 0:
+            stp -= 2
+        else:
+            stp = stp
+        return stp
+
+    def motors(command):   # command comes from node-red GUI
+        global mach, outgoingD, startstepping, targetstep
+
+        # LOOP THRU EACH STEPPER AND THE TWO ROTATIONS (CW/CCW) AND CREATE COIL ARRAY (HIGH PULSES)
+        for i in range(len(mach.stepper)):   # Loop thru each stepper
+            for rotation in range(2):        # Will loop thru Half and Full step and both rotations, CW and CCW
+                if rotation == 0:            # H is for half-step. Do array rotation by 1 for first direction
+                    mach.stepper[i].coils["HarrOUT"][rotation] = mach.stepper[i].coils["Harr1"][rotation][1:] + mach.stepper[i].coils["Harr1"][rotation][:1]
+                else:                        # Half step. array rotation by 3 for opposite direction
+                    mach.stepper[i].coils["HarrOUT"][rotation] = mach.stepper[i].coils["Harr1"][rotation][3:] + mach.stepper[i].coils["Harr1"][rotation][:3]
+                mach.stepper[i].coils["Harr1"][rotation] = mach.stepper[i].coils["arr2"][rotation]
+                mach.stepper[i].coils["arr2"][rotation] = mach.stepper[i].coils["HarrOUT"][rotation]
+                
+                if rotation == 0:            # F is for full-step. Do array rotation by 1 for first direction
+                    mach.stepper[i].coils["FarrOUT"][rotation] = mach.stepper[i].coils["Farr1"][rotation][1:] + mach.stepper[i].coils["Farr1"][rotation][:1]
+                else:                        # Full step. array rotation by 3 for opposite direction
+                    mach.stepper[i].coils["FarrOUT"][rotation] = mach.stepper[i].coils["Farr1"][rotation][3:] + mach.stepper[i].coils["Farr1"][rotation][:3]
+                mach.stepper[i].coils["Farr1"][rotation] = mach.stepper[i].coils["FarrOUT"][rotation]
+            
+            # Now that coil array updated set the 4 available speeds/direction. Half step CW & CCW. Full step CW & CCW.
+            mach.stepper[i].speed[0] = mach.stepper[i].coils["FarrOUT"][0]
+            mach.stepper[i].speed[1] = mach.stepper[i].coils["HarrOUT"][0]
+            mach.stepper[i].speed[3] = mach.stepper[i].coils["HarrOUT"][1]
+            mach.stepper[i].speed[4] = mach.stepper[i].coils["FarrOUT"][1]
+            stepspeed = command["speed"][i]         # stepspeed is a temporary variable for this loop
+
+            # If mode is 1 (incremental stepping) and startstep has been flagged from node-red gui then startstepping
+            if command["mode"][i] == 1 and command["startstep"][i] == 1:
+                startstepping[i] = True
+                main_logger.debug("2:STRTSTP ON - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
+            
+            # Mode set to 1 (incremental stepping) but haven't started stepping. Stop motor (stepspeed=2) and set the target step (based on node-red gui)
+            # Will wait until startstep flag is sent from node-red GUI before starting motor
+            if command["mode"][i] == 1 and not startstepping[i]:
+                stepspeed = 2
+                if abs(mach.stepper[i].step) + command["step"][i] <= FULLREVOLUTION: # Set the target step based on node-red gui target and current step for that motor
+                    targetstep[i] = abs(mach.stepper[i].step) + command["step"][i]
+                else:
+                    targetstep[i] = FULLREVOLUTION      # If the target step goes past the 360° degree mark then stop at 360° mark.
+                main_logger.debug("1:MODE1      - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
+            
+            # IN INCREMENT MODE1. Keep stepping until the target step is met. Then reset the startstepping/startstep(nodered) flags.
+            elif command["mode"][i] == 1 and startstepping[i]:
+                main_logger.debug("3:STEPPING   - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
+                if abs(mach.stepper[i].step) >= targetstep[i]:
+                    main_logger.debug("4:DONE-M1OFF - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
+                    startstepping[i] = False
+                    command["startstep"][i] = 0
+            
+            # SEND COIL ARRAY (HIGH PULSES) TO GPIO PINS
+            GPIO.output(mach.stepper[i].pins, mach.stepper[i].speed[stepspeed]) # output the coil array (speed/direction) to the GPIO pins.
+            mach.stepper[i].step = stepupdate(stepspeed, mach.stepper[i].step)  # update the motor step based on direction and half vs full step
+
+            # PUBLISH HOW MANY STEPS THE MOTOR IS AT TO NODERED GUI
+            if stepspeed != 2 and (abs(mach.stepper[i].step) % interval[i]) < 3 : # If motor is turning and step is a approx multiple of interval (from nodered gui) then send status to node-red
+                outgoingD['motori'] = i
+                outgoingD['stepsi'] = mach.stepper[i].step
+                mqtt_client.publish(MQTT_PUB_TOPIC1, json.dumps(outgoingD))  
+            
+            if (abs(mach.stepper[i].step) > FULLREVOLUTION):  # If hit full revolution reset the step counter. If want to step past full revolution would need to later add a 'not startstepping'
+                main_logger.debug("FULL REVOLUTION -- Motor:{0} Steps:{1} Mode:{2} startstepping:{3} coils:{4}".format(i, mach.stepper[i].step, command["mode"][i], startstepping[i], mach.stepper[i].speed[command["speed"][i]]))
+                mach.stepper[i].step = 0
+        sleep(float(command["delay"])/1000)  # delay can be updated from node-red gui. Needs optimal setting for the motors.
+
     #==== LOGGING/DEBUGGING ============#
 
-    #logging.basicConfig(level=logging.DEBUG) # Using RotatingFileHandler instead.
+    #logging.basicConfig(level=logging.DEBUG) # Too many debug output lines. Need to use file logging with RotatingFileHandler instead of basicConfig.
 
     main_logger = setup_logging(path.dirname(path.abspath(__file__)))
     main_logger.info("setup logging module")
@@ -109,30 +186,30 @@ if __name__ == "__main__":
 
     @dataclass
     class StepperMotor:
-        pins: list
-        mode: int
-        step: int
-        speed: list
-        coils: dict
+        pins: list       # Pins connected to ULN2003 IN1,2,3,4
+        mode: int        # Mode 0 = continuous. Mode 1 = incremental
+        step: int        # Counter to keep track of motor step (0-4076 in halfstep mode)
+        speed: list      # 0=fullstepCCW, 1=halfstepCCW, 2=stop, 3=halfstep CW, 4=fullstep CW
+        coils: dict      # Arrays to specify HIGH pulses sent to coils.
 
     @dataclass
     class Machine:
         stepper: List[StepperMotor]
-        delay: float    # Future use as separate delay per motor
+        delay: float    
 
     m1 = StepperMotor([12, 16, 20, 21], 0, 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
     m2 = StepperMotor([19, 13, 6, 5], 0, 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
     
+    # SETUP/INITIALIZE THE STEPPER MOTORS
     GPIO.setmode(GPIO.BCM)
     FULLREVOLUTION = 4076    # Steps per revolution
     DEFAULTDELAY = 1.6       # default delay in msec
-    startstepping, targetstep, debug1 = [],[],[]
+    startstepping, targetstep = [],[]
     mach = Machine([m1, m2], DEFAULTDELAY)
     for i in range(len(mach.stepper)):          # Setup each stepper motor
         mach.stepper[i].speed[2] = [0,0,0,0]
         startstepping.append(False)  # Flag for increment stepping function
         targetstep.append(0)         # Flag for increment stepping function
-        debug1.append(True)           # Flag for debugging loop
         for rotation in range(2):        # Setup each pin in each stepper
             mach.stepper[i].coils["Harr1"][rotation] = [0,1,1,0]
             mach.stepper[i].coils["Farr1"][rotation] = [0,1,1,0]
@@ -176,73 +253,10 @@ if __name__ == "__main__":
     #==== MAIN LOOP ====================#
     # MQTT setup is successful. Initialize dictionaries and start the main loop.
     
-    def stepupdate(spd, stp):
-        if spd == 3:
-            stp += 1
-        elif spd ==4:
-            stp += 2
-        elif spd == 1:
-            stp -= 1
-        elif spd == 0:
-            stp -= 2
-        else:
-            stp = stp
-        return stp
-
-    def motors(command):
-        global mach, outgoingD, startstepping, targetstep, debug1, i
-
-        for i in range(len(mach.stepper)):          # Setup each stepper motor
-            for rotation in range(2):        # Setup each pin in each stepper
-                if rotation == 0:
-                    mach.stepper[i].coils["HarrOUT"][rotation] = mach.stepper[i].coils["Harr1"][rotation][1:] + mach.stepper[i].coils["Harr1"][rotation][:1]
-                else:
-                    mach.stepper[i].coils["HarrOUT"][rotation] = mach.stepper[i].coils["Harr1"][rotation][3:] + mach.stepper[i].coils["Harr1"][rotation][:3]
-                mach.stepper[i].coils["Harr1"][rotation] = mach.stepper[i].coils["arr2"][rotation]
-                mach.stepper[i].coils["arr2"][rotation] = mach.stepper[i].coils["HarrOUT"][rotation]
-                
-                if rotation == 0:
-                    mach.stepper[i].coils["FarrOUT"][rotation] = mach.stepper[i].coils["Farr1"][rotation][1:] + mach.stepper[i].coils["Farr1"][rotation][:1]
-                else:
-                    mach.stepper[i].coils["FarrOUT"][rotation] = mach.stepper[i].coils["Farr1"][rotation][3:] + mach.stepper[i].coils["Farr1"][rotation][:3]
-                mach.stepper[i].coils["Farr1"][rotation] = mach.stepper[i].coils["FarrOUT"][rotation]
-            mach.stepper[i].speed[0] = mach.stepper[i].coils["FarrOUT"][0]
-            mach.stepper[i].speed[1] = mach.stepper[i].coils["HarrOUT"][0]
-            mach.stepper[i].speed[3] = mach.stepper[i].coils["HarrOUT"][1]
-            mach.stepper[i].speed[4] = mach.stepper[i].coils["FarrOUT"][1]
-            stepspeed = command["speed"][i]         # stepspeed is a temporary variable for this loop
-            if command["mode"][i] == 1 and command["startstep"][i] == 1:
-                startstepping[i] = True
-                main_logger.debug("2:STRTSTP ON - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
-                debug1[i] = True
-            if command["mode"][i] == 1 and not startstepping[i]:
-                stepspeed = 2
-                if abs(mach.stepper[i].step) + command["step"][i] <= FULLREVOLUTION:
-                    targetstep[i] = abs(mach.stepper[i].step) + command["step"][i]
-                else:
-                    targetstep[i] = FULLREVOLUTION
-                if debug1[i]:
-                    main_logger.debug("1:MODE1      - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
-                    debug1[i] = False
-            elif command["mode"][i] == 1 and startstepping[i]:
-                main_logger.debug("3:STEPPING   - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
-                if abs(mach.stepper[i].step) >= targetstep[i]:
-                    main_logger.debug("4:DONE-M1OFF - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, command["mode"][i], command["startstep"][i], startstepping[i], mach.stepper[i].step, targetstep[i]))
-                    startstepping[i] = False
-                    command["startstep"][i] = 0
-            GPIO.output(mach.stepper[i].pins, mach.stepper[i].speed[stepspeed])
-            mach.stepper[i].step = stepupdate(stepspeed, mach.stepper[i].step)
-            if stepspeed != 2 and (abs(mach.stepper[i].step) % interval[i]) == 0 :
-                outgoingD['motori'] = i
-                outgoingD['stepsi'] = mach.stepper[i].step
-                mqtt_client.publish(MQTT_PUB_TOPIC1, json.dumps(outgoingD))
-            if (abs(mach.stepper[i].step) > FULLREVOLUTION):  # If want to step past full revolution then need to add 'not startstepping'
-                main_logger.debug("FULL REVOLUTION -- Motor:{0} Steps:{1} Mode:{2} startstepping:{3} coils:{4}".format(i, mach.stepper[i].step, command["mode"][i], startstepping[i], mach.stepper[i].speed[command["speed"][i]]))
-                mach.stepper[i].step = 0
-        sleep(float(command["delay"])/1000)
-    
-    interval = [254, 254]
+    interval = [254, 254]  # Default interval for publishing updates. Do not want too many messages sent. Needs to be multiple of 4076.
     outgoingD = {}
+
+    # Initial incomingD settings. From here on will be updated by node-red gui thru user input. Main controller for stepper motors.
     incomingD = {"delay":DEFAULTDELAY, "speed":[2,2], "mode":[0,0], "step":[FULLREVOLUTION, FULLREVOLUTION], "startstep":[0,0]}
     #newmsg = False
     try:
