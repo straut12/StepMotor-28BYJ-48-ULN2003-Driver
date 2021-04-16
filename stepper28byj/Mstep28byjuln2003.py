@@ -28,7 +28,7 @@ from typing import List
 def setup_logging(log_dir):
     # Create loggers
     main_logger = logging.getLogger(__name__)
-    main_logger.setLevel(logging.INFO)
+    main_logger.setLevel(logging.DEBUG)
     log_file_format = logging.Formatter("[%(levelname)s] - %(asctime)s - %(name)s - : %(message)s in %(pathname)s:%(lineno)d")
     log_console_format = logging.Formatter("[%(levelname)s]: %(message)s")
 
@@ -36,7 +36,7 @@ def setup_logging(log_dir):
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(log_console_format)
 
-    exp_file_handler = RotatingFileHandler('{}/exp_debug.log'.format(log_dir), maxBytes=10**6, backupCount=5) # 10MB file
+    exp_file_handler = RotatingFileHandler('{}/exp_debug.log'.format(log_dir), maxBytes=10**6, backupCount=5) # 1MB file
     exp_file_handler.setLevel(logging.DEBUG)
     exp_file_handler.setFormatter(log_file_format)
 
@@ -60,8 +60,9 @@ class StepperMotor:
 class Machine:
     stepper: List[StepperMotor]
 
-class stepper28byj:   # command comes from node-red GUI
+class Stepper:   # command comes from node-red GUI
     def __init__(self):
+        self.main_logger = setup_logging(path.dirname(path.abspath(__file__)))
         self.FULLREVOLUTION = 4076    # Steps per revolution
         m1 = StepperMotor([12, 16, 20, 21], 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "arr3":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
         m2 = StepperMotor([19, 13, 6, 5], 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "arr3":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
@@ -69,7 +70,6 @@ class stepper28byj:   # command comes from node-red GUI
         GPIO.setmode(GPIO.BCM)
         self.startstepping = []
         self.targetstep = []
-        self.interval = []
         self.outgoing = ["False",[]]
         self.mach = Machine([m1, m2])
         for i in range(len(self.mach.stepper)):          # Setup each stepper motor
@@ -77,7 +77,6 @@ class stepper28byj:   # command comes from node-red GUI
             self.outgoing[1].append(0)
             self.startstepping.append(False)  # Flag for increment stepping function
             self.targetstep.append(291)         # Increment target step. Will be updated with nodered gui
-            self.interval.append(97)         # Default interval for publishing updates. Will be updated nodered gui. Do not want too many messages sent. Only updates if 4076 % interval == 2
             for rotation in range(2):        # Setup each pin in each stepper
                 self.mach.stepper[i].coils["Harr1"][rotation] = [0,0,1,1]
                 self.mach.stepper[i].coils["Farr1"][rotation] = [0,0,1,1]
@@ -85,11 +84,12 @@ class stepper28byj:   # command comes from node-red GUI
                 self.mach.stepper[i].coils["arr3"][rotation] = [0,0,1,0]
             for pin in self.mach.stepper[i].pins:        # Setup each pin in each stepper
                 GPIO.setup(pin,GPIO.OUT)
-                main_logger.info("pin {0} Setup".format(pin))
+                self.main_logger.info("pin {0} Setup".format(pin))
 
-    def step(self, incomingD):
+    def step(self, incomingD, interval):
         ''' LOOP THRU EACH STEPPER AND THE TWO ROTATIONS (CW/CCW) AND SEND COIL ARRAY (HIGH PULSES) '''
         self.command = incomingD
+        self.interval = interval
 
         for i in range(len(self.mach.stepper)):   # Loop thru each stepper
             for rotation in range(2):        # Will loop thru Half and Full step and both rotations, CW and CCW
@@ -136,20 +136,20 @@ class stepper28byj:   # command comes from node-red GUI
                     self.targetstep[i] = self.mach.stepper[i].step - self.command["step"][i]
                     if self.targetstep[i] < (self.FULLREVOLUTION * -1):
                         self.targetstep[i] = (self.FULLREVOLUTION * -1)
-                main_logger.debug("2:STRTSTP ON - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, self.command["mode"][i], self.command["startstep"][i], self.startstepping[i], self.mach.stepper[i].step, self.targetstep[i]))
+                self.main_logger.debug("2:STRTSTP ON - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, self.command["mode"][i], self.command["startstep"][i], self.startstepping[i], self.mach.stepper[i].step, self.targetstep[i]))
             
             # Mode set to 1 (incremental stepping) but haven't started stepping. Stop motor (stepspeed=2) and set the target step (based on node-red gui)
             # Will wait until startstep flag is sent from node-red GUI before starting motor
             if self.command["mode"][i] == 1 and not self.startstepping[i]:
                 stepspeed = 2
                 self.command["speed"][i] = 2
-                main_logger.debug("1:MODE1      - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, self.command["mode"][i], self.command["startstep"][i], self.startstepping[i], self.mach.stepper[i].step, self.targetstep[i]))
+                self.main_logger.debug("1:MODE1      - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, self.command["mode"][i], self.command["startstep"][i], self.startstepping[i], self.mach.stepper[i].step, self.targetstep[i]))
             
             # IN INCREMENT MODE1. Keep stepping until the target step is met. Then reset the startstepping/startstep(nodered) flags.
             elif self.command["mode"][i] == 1 and self.startstepping[i]:
-                main_logger.debug("3:STEPPING   - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, self.command["mode"][i], self.command["startstep"][i], self.startstepping[i], self.mach.stepper[i].step, self.targetstep[i]))
+                self.main_logger.debug("3:STEPPING   - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, self.command["mode"][i], self.command["startstep"][i], self.startstepping[i], self.mach.stepper[i].step, self.targetstep[i]))
                 if abs((abs(self.mach.stepper[i].step) - abs(self.targetstep[i]))) < 2: # if delta is less than 2 then target met. Can't use 0 since full step increments by 2
-                    main_logger.debug("4:DONE-M1OFF - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, self.command["mode"][i], self.command["startstep"][i], self.startstepping[i], self.mach.stepper[i].step, self.targetstep[i]))
+                    self.main_logger.debug("4:DONE-M1OFF - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, self.command["mode"][i], self.command["startstep"][i], self.startstepping[i], self.mach.stepper[i].step, self.targetstep[i]))
                     self.startstepping[i] = False
                     #command["startstep"][i] = 0
 
@@ -157,8 +157,9 @@ class stepper28byj:   # command comes from node-red GUI
             GPIO.output(self.mach.stepper[i].pins, self.mach.stepper[i].speed[stepspeed]) # output the coil array (speed/direction) to the GPIO pins.
             self.mach.stepper[i].step = self.stepupdate(stepspeed, self.mach.stepper[i].step)  # update the motor step based on direction and half vs full step
             # IF FULL REVOLUTION - reset the step counter
+            self.main_logger.debug("FULL REVOLUTION -- Motor:{0} Steps:{1} Mode:{2} startstepping:{3} coils:{4}".format(i, self.mach.stepper[i].step, self.command["mode"][i], self.startstepping[i], self.mach.stepper[i].speed[self.command["speed"][i]]))
             if (abs(self.mach.stepper[i].step) > self.FULLREVOLUTION):  # If hit full revolution reset the step counter. If want to step past full revolution would need to later add a 'not startstepping'
-                main_logger.debug("FULL REVOLUTION -- Motor:{0} Steps:{1} Mode:{2} startstepping:{3} coils:{4}".format(i, self.mach.stepper[i].step, self.command["mode"][i], self.startstepping[i], self.mach.stepper[i].speed[self.command["speed"][i]]))
+                self.main_logger.debug("FULL REVOLUTION -- Motor:{0} Steps:{1} Mode:{2} startstepping:{3} coils:{4}".format(i, self.mach.stepper[i].step, self.command["mode"][i], self.startstepping[i], self.mach.stepper[i].speed[self.command["speed"][i]]))
                 self.mach.stepper[i].step = 0
     
         sleep(float(self.command["delay"][i])/1000)  # delay can be updated from node-red gui. Needs optimal setting for the motors.
@@ -177,7 +178,7 @@ class stepper28byj:   # command comes from node-red GUI
         if self.outgoing[0]:
             return self.outgoing  # Only return values if one of the motors had an update
 
-    def resetgauge(self):
+    def resetsteps(self):
         for i in range(len(self.mach.stepper)):
             self.mach.stepper[i].step = 0
 
@@ -195,6 +196,9 @@ class stepper28byj:   # command comes from node-red GUI
             stp = stp
         return stp
 
+    def cleanupGPIO(self):
+        GPIO.cleanup()
+
 if __name__ == "__main__":
 
     #logging.basicConfig(level=logging.DEBUG) # Too many debug output lines. Need to use file logging with RotatingFileHandler instead of basicConfig.
@@ -202,10 +206,11 @@ if __name__ == "__main__":
     main_logger.info("setup logging module")
     outgoing = []
     incomingD={"delay":[1.6,1.6], "speed":[3,3], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
-    motor = stepper28byj()
+    interval = [97, 97]
+    motor = Stepper()
     try:
         while True:
-            motor.step(incomingD) # Pass instructions for stepper motor for testing
+            motor.step(incomingD, interval) # Pass instructions for stepper motor for testing
             outgoingA = motor.getsteps()
             if outgoingA is not None:
                 print(outgoingA[1])
@@ -213,4 +218,4 @@ if __name__ == "__main__":
         main_logger.info("Pressed ctrl-C")
     finally:
         GPIO.cleanup()
-        main_logger.info("GPIO cleaned up")   
+        main_logger.info("GPIO cleaned up")
