@@ -39,7 +39,7 @@ if __name__ == "__main__":
         console_handler.setFormatter(log_console_format)
 
         exp_file_handler = RotatingFileHandler('{}/exp_debug.log'.format(log_dir), maxBytes=10**6, backupCount=5) # 1MB file
-        exp_file_handler.setLevel(logging.DEBUG)
+        exp_file_handler.setLevel(logging.INFO)
         exp_file_handler.setFormatter(log_file_format)
 
         exp_errors_file_handler = RotatingFileHandler('{}/exp_error.log'.format(log_dir), maxBytes=10**6, backupCount=5)

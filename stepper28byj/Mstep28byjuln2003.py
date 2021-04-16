@@ -28,7 +28,7 @@ from typing import List
 def setup_logging(log_dir):
     # Create loggers
     main_logger = logging.getLogger(__name__)
-    main_logger.setLevel(logging.DEBUG)
+    main_logger.setLevel(logging.INFO)
     log_file_format = logging.Formatter("[%(levelname)s] - %(asctime)s - %(name)s - : %(message)s in %(pathname)s:%(lineno)d")
     log_console_format = logging.Formatter("[%(levelname)s]: %(message)s")
 
@@ -37,7 +37,7 @@ def setup_logging(log_dir):
     console_handler.setFormatter(log_console_format)
 
     exp_file_handler = RotatingFileHandler('{}/exp_debug.log'.format(log_dir), maxBytes=10**6, backupCount=5) # 1MB file
-    exp_file_handler.setLevel(logging.DEBUG)
+    exp_file_handler.setLevel(logging.INFO)
     exp_file_handler.setFormatter(log_file_format)
 
     exp_errors_file_handler = RotatingFileHandler('{}/exp_error.log'.format(log_dir), maxBytes=10**6, backupCount=5)
@@ -70,7 +70,7 @@ class Stepper:   # command comes from node-red GUI
         GPIO.setmode(GPIO.BCM)
         self.startstepping = []
         self.targetstep = []
-        self.outgoing = ["False",[]]
+        self.outgoing = [False,[]]
         self.mach = Machine([m1, m2])
         for i in range(len(self.mach.stepper)):          # Setup each stepper motor
             self.mach.stepper[i].speed[2] = [0,0,0,0]
