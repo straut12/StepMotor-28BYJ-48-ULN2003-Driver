@@ -127,6 +127,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-exp_debug.log.1
-exp_debug.log.1
-exp_debug.log.2
+exp_debug.log*
+exp_error.log*
