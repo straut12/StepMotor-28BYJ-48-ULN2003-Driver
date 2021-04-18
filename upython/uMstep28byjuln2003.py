@@ -4,7 +4,7 @@
 28BYJ-48 Stepper motor with ULN2003 Driver board
 Motor instructions received via mqtt from a node-red server
 
-See HARDWARE/MQTT for Wiring and TOPICS
+See HARDWARE/MQTT initialize in boot.py for Wiring and TOPICS
 
 Wiring
 Motor1
@@ -28,8 +28,8 @@ class Stepper:   # command comes from node-red GUI
         self.steppercoils = [{"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "arr3":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]}, {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "arr3":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]}]
         self.FULLREVOLUTION = 4076    # Steps per revolution
         # Setup and intialize motor parameters
-        self.startstepping = [False,False]
-        self.targetstep = [291,291]
+        self.startstepping = [False,False]  # Flag send from node red gui to start stepping in incremental mode
+        self.targetstep = [291,291]         # When incremental stepping started will calculate the target step to stop at
         self.outgoing = [False, [0, 0]]  # Container for getting how many steps each motor is at. Boolean is flag if there is valid results
         for i in range(self.numbermotors):
             self.stepperspeed[i][2] = [0,0,0,0]  # speed 2 is hard coded as stop
@@ -116,10 +116,10 @@ class Stepper:   # command comes from node-red GUI
                 #print("FULL REVOLUTION -- Motor:{0} Steps:{1} Mode:{2} startstepping:{3} coils:{4}".format(i, self.steppersteps, self.command["mode"], self.startstepping, self.stepperspeed[self.command["speed"]]))
                 self.steppersteps[i] = 0
 
-        sleep_us(int(self.command["delay"][0]*1000))  # delay can be updated from node-red gui. Needs optimal setting for the motors.
+        sleep_us(int(self.command["delay"][0]*1000))  # delay can be updated from node-red gui. Needs optimal setting for the motors. Currently one delay for all motors
     
     def getsteps(self):
-        ''' PUBLISH HOW MANY STEPS THE MOTOR IS AT TO NODERED GUI '''
+        ''' Publish how many steps the motor is at to node red for updating the step gauges in dashboard '''
         for i in range(self.numbermotors):
             self.outgoing[0] = False
             stepspeed = self.command["speed"][i]
@@ -133,11 +133,12 @@ class Stepper:   # command comes from node-red GUI
             return self.outgoing  # Only return values if one of the motors had an update
 
     def resetsteps(self):
+        ''' Reset the step counters on all motors '''
         for i in range(self.numbermotors):
             self.steppersteps[i] = 0
 
     def stepupdate(self, spd, stp):
-        ''' Will update the motor step counter based on full vs half speed and CW vs CCW. Details in Stepper Class'''
+        ''' Will update the motor step counter based on full vs half speed and CW vs CCW. half = 1, full = 2'''
         if spd == 4:
             stp += 2
         elif spd ==3:

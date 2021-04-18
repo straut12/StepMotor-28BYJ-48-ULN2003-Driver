@@ -6,6 +6,9 @@ import micropython
 import network
 import esp
 import re
+from machine import Pin
+import ujson
+from uMstep28byjuln2003 import Stepper
 esp.osdebug(None)
 import gc
 gc.collect()
@@ -16,6 +19,7 @@ if machine.reset_cause() == machine.DEEPSLEEP_RESET:
 with open("stem", "rb") as f:
   stem = f.read().splitlines()
 
+#==== MQTT SETUP ====#
 MQTT_SERVER = '10.0.0.115'
 MQTT_USER = stem[0] 
 MQTT_PASSWORD = stem[1] 
@@ -29,9 +33,21 @@ MQTT_CLIENT_ID = ubinascii.hexlify(machine.unique_id())
 WIFI_SSID = stem[2]
 WIFI_PASSWORD = stem[3]
 
-stepreset = False   # used to reset steps thru nodered gui
+# Initialize global variables
+# controlsD, interval, stepresetare are updated in mqtt on_message
+interval = [97,97]
+controlsD={"delay":[1,1], "speed":[2,2], "mode":[0,0], "inverse":[False,True], "step":[2038,2038], "startstep":[0,0]}
+stepreset = False    # used to reset steps thru nodered gui
+incomingID = ["entire msg", "lvl2", "lvl3", "datatype"]
+outgoingD = {'motor0i':0, 'motor1i':0}  # need both motors initialized for nodered function
 
+#==== HARDWARE SETUP ====#
+m1pins = [5,18,19,21]
+m2pins = [27,14,12,13]
+numbermotors = 2
+motor = Stepper(m1pins, m2pins, numbermotors)
 
+#==== CONNECT MQTT ====#
 station = network.WLAN(network.STA_IF)
 
 station.active(True)

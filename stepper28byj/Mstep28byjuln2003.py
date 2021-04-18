@@ -64,16 +64,11 @@ class Stepper:   # command comes from node-red GUI
     def __init__(self, *args):
         self.main_logger = setup_logging(path.dirname(path.abspath(__file__)))
         self.FULLREVOLUTION = 4076    # Steps per revolution
-        m1pin = args[0]
-        try: m2pin = args[1]
-        except IndexError: numbermotors = 1
-        else: numbermotors = 2
-        m1 = StepperMotor(m1pin, 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "arr3":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
-        if numbermotors == 2:
-            m2 = StepperMotor(m2pin, 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "arr3":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
-            self.mach = Machine([m1, m2])
-        else:
-            self.mach = Machine([m1])
+        motorpins = args
+        motors = []
+        for pinlist in motorpins:
+            motors.append(StepperMotor(pinlist, 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "arr3":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]}))
+        self.mach = Machine(motors)
         # Setup and intialize motor parameters
         GPIO.setmode(GPIO.BCM)
         self.startstepping = []     # Flag sent from nodered dashboard to start stepping in increment mode
