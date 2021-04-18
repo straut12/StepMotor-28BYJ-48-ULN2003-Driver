@@ -61,19 +61,27 @@ class Machine:
     stepper: List[StepperMotor]
 
 class Stepper:   # command comes from node-red GUI
-    def __init__(self):
+    def __init__(self, *args):
         self.main_logger = setup_logging(path.dirname(path.abspath(__file__)))
         self.FULLREVOLUTION = 4076    # Steps per revolution
-        m1 = StepperMotor([12, 16, 20, 21], 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "arr3":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
-        m2 = StepperMotor([19, 13, 6, 5], 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "arr3":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
+        m1pin = args[0]
+        try: m2pin = args[1]
+        except IndexError: numbermotors = 1
+        else: numbermotors = 2
+        m1 = StepperMotor(m1pin, 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "arr3":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
+        if numbermotors == 2:
+            m2 = StepperMotor(m2pin, 0, [0,0,0,0,0], {"Harr1":[0,1], "Farr1":[0,1], "arr2":[0,1], "arr3":[0,1], "HarrOUT":[0,1], "FarrOUT":[0,1]})
+            self.mach = Machine([m1, m2])
+        else:
+            self.mach = Machine([m1])
         # Setup and intialize motor parameters
         GPIO.setmode(GPIO.BCM)
-        self.startstepping = []
-        self.targetstep = []
-        self.outgoing = [False,[]]
-        self.mach = Machine([m1, m2])
+        self.startstepping = []     # Flag sent from nodered dashboard to start stepping in increment mode
+        self.targetstep = []        # When mode1, increment, started a target step is calculated
+        self.outgoing = [False,[]]  # Container to get the steps each motor is at for updating nodered dashboard
+        
         for i in range(len(self.mach.stepper)):          # Setup each stepper motor
-            self.mach.stepper[i].speed[2] = [0,0,0,0]
+            self.mach.stepper[i].speed[2] = [0,0,0,0]    # Speed 2 is hard coded as stop
             self.outgoing[1].append(0)
             self.startstepping.append(False)  # Flag for increment stepping function
             self.targetstep.append(291)         # Increment target step. Will be updated with nodered gui
@@ -207,7 +215,9 @@ if __name__ == "__main__":
     outgoing = []
     incomingD={"delay":[1.6,1.6], "speed":[3,3], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
     interval = [97, 97]
-    motor = Stepper()
+    m1pins = [12, 16, 20, 21]
+    m2pins = [19, 13, 6, 5]
+    motor = Stepper(m1pins, m2pins)  # can enter 1 to 2 list of pins (up to 2 motors)
     try:
         while True:
             motor.step(incomingD, interval) # Pass instructions for stepper motor for testing

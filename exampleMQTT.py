@@ -14,7 +14,7 @@ IN1,2,3,4
 """
 
 from time import sleep
-import sys, logging, json
+import sys, logging, json, re
 from logging.handlers import RotatingFileHandler
 from os import path
 from pathlib import Path
@@ -69,17 +69,19 @@ if __name__ == "__main__":
     MQTT_USER = user_info[0]                      # Replace with your mqtt user ID
     MQTT_PASSWORD = user_info[1]                  # Replace with your mqtt password
     MQTT_CLIENT_ID = 'pi4'
-    MQTT_SUB_TOPIC = ['pi/stepper', 'pi/stepper/interval', 'pi/stepper/stepreset']
-    stepreset = False   # used to reset steps thru nodered gui
-    MQTT_PUB_TOPIC1 = 'pi/stepper/status'
-    MQTT_PUB_TOPIC2 = 'pi/stepper/resetgauge'
+    MQTT_SUB_TOPIC = []          # + is wildcard for that level
+    MQTT_SUB_TOPIC.append('nred2pi/stepperZCMD/+')
+    #MQTT_SUB_TOPIC.append('nred2pi/servoZCMD/+')
+    MQTT_REGEX = r'nred2pi/([^/]+)/([^/]+)'
+    MQTT_PUB_TOPIC1 = 'pi2nred/stepperZDATA/motoristepsi'
+    MQTT_PUB_TOPIC2 = 'pi2nred/nredZCMD/resetstepgauge'
 
+    # Initialize on_message array/variables. From here on will be updated by node-red gui thru user input. Main controller for stepper motors.
+    stepreset = False   # used to reset steps thru nodered gui
     outgoingD = {}
-    # Initialize incomingD array/variables. Actual values over-written in stepper create below. From here on will be updated by node-red gui thru user input. Main controller for stepper motors.
-    incomingD = {"delay":[1.6,1.6], "speed":[3,3], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
+    controlsD = {"delay":[1.6,1.6], "speed":[2,2], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
     interval = [97,97]
-    
-    #newmsg = False   # Not using newmsg flag. Instead incomingD is directly referenced inside main motor function
+    incomingID = ["entire msg", "lvl2", "lvl3", "datatype"]
     
     mqtt_client = mqtt.Client(MQTT_CLIENT_ID) # Create mqtt_client object
     
@@ -99,19 +101,22 @@ if __name__ == "__main__":
 
     def on_message(client, userdata, msg):
         """on message callback will receive messages from the server/broker. Must be subscribed to the topic in on_connect"""
-        global newmsg, incomingD, interval, stepreset
-        if msg.topic == MQTT_SUB_TOPIC[2]:
-            stepreset = json.loads(str(msg.payload.decode("utf-8", "ignore")))
-        if msg.topic == MQTT_SUB_TOPIC[1]:
-            interval = json.loads(str(msg.payload.decode("utf-8", "ignore")))
-        if msg.topic == MQTT_SUB_TOPIC[0]:
-            incomingD = json.loads(str(msg.payload.decode("utf-8", "ignore")))  # decode the json msg and convert to python dictionary
-            #newmsg = True
-            # Debugging. Will print the JSON incoming payload and unpack the converted dictionary
-            #main_logger.debug("Receive: msg on subscribed topic: {0} with payload: {1}".format(msg.topic, str(msg.payload))) 
-            #main_logger.debug("Incoming msg converted (JSON->Dictionary) and unpacking")
-            #for key, value in incomingD.items():
-            #    main_logger.debug("{0}:{1}".format(key, value))
+        global incomingID, controlsD, interval, stepreset, newmsg, incomingD, interval, stepreset
+        msgmatch = re.match(MQTT_REGEX, msg.topic)
+        if msgmatch:
+            incomingD = json.loads(str(msg.payload.decode("utf-8", "ignore"))) # decode json data
+            incomingID = [msgmatch.group(0), msgmatch.group(1), msgmatch.group(2), type(incomingD)]
+            if incomingID[2] == 'controls':
+                controlsD = incomingD
+            elif incomingID[2] == 'interval':
+                interval = incomingD
+            elif incomingID[2] == 'stepreset':
+                stepreset = incomingD
+        # Debugging. Will print the JSON incoming payload and unpack the converted dictionary
+        #main_logger.debug("Receive: msg on subscribed topic: {0} with payload: {1}".format(msg.topic, str(msg.payload))) 
+        #main_logger.debug("Incoming msg converted (JSON->Dictionary) and unpacking")
+        #for key, value in incomingD.items():
+        #    main_logger.debug("{0}:{1}".format(key, value))
 
     def on_publish(client, userdata, mid):
         """on publish will send data to broker"""
@@ -129,9 +134,10 @@ if __name__ == "__main__":
 
     #==== HARDWARE SETUP ===============# 
     
-    # Done inside Mstep28byjuln2003 mdoule
+    m1pins = [12, 16, 20, 21]
+    m2pins = [19, 13, 6, 5]
+    motor = stepper28byj.Stepper(m1pins, m2pins)  # can enter 1 to 2 list of pins (up to 2 motors)
     
-
     #==== MAIN LOOP ====================#
     # Start/bind mqtt functions
     # Create a couple flags to handle a failed attempt at connecting. If user/password is wrong we want to stop the loop.
@@ -155,20 +161,19 @@ if __name__ == "__main__":
         sys.exit()
     
     # MQTT setup is successful. Initialize dictionaries and start the main loop.    
-    motor = stepper28byj.Stepper()
     try:
         while True:
-            motor.step(incomingD, interval) # Pass instructions for stepper motor for testing
-            outgoingA = motor.getsteps()
-            if outgoingA is not None:
-                for i, items in enumerate(outgoingA[1]):
+            motor.step(controlsD, interval) # Pass instructions for stepper motor for testing
+            stepdata = motor.getsteps()
+            if stepdata is not None:
+                for i, items in enumerate(stepdata[1]):
                     outgoingD['motori'] = i
-                    outgoingD['stepsi'] = outgoingA[1][i]
+                    outgoingD['stepsi'] = stepdata[1][i]
                     mqtt_client.publish(MQTT_PUB_TOPIC1, json.dumps(outgoingD))
             if stepreset:
                 motor.resetsteps()
                 stepreset = False
-                mqtt_client.publish(MQTT_PUB_TOPIC2, "reset")
+                mqtt_client.publish(MQTT_PUB_TOPIC2, "resetstepgauge")
     except KeyboardInterrupt:
         main_logger.info("Pressed ctrl-C")
     finally:
