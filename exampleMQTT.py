@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
     def on_message(client, userdata, msg):
         """on message callback will receive messages from the server/broker. Must be subscribed to the topic in on_connect"""
-        global incomingID, controlsD, interval, stepreset, newmsg, incomingD, interval, stepreset
+        global incomingID, controlsD, interval, stepreset
         msgmatch = re.match(MQTT_REGEX, msg.topic)
         if msgmatch:
             incomingD = json.loads(str(msg.payload.decode("utf-8", "ignore"))) # decode json data
