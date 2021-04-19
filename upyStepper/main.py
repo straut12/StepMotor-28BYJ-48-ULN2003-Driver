@@ -19,25 +19,25 @@ def on_message(topic, msg):
         #  print("{0}:{1}".format(key, value))
 
 def connect_and_subscribe():
-  global MQTT_CLIENT_ID, MQTT_SERVER, MQTT_SUB_TOPIC, MQTT_USER, MQTT_PASSWORD
-  client = MQTTClient(MQTT_CLIENT_ID, MQTT_SERVER, user=MQTT_USER, password=MQTT_PASSWORD)
-  client.set_callback(on_message)
-  client.connect()
-  print('(CONNACK) Connected to {0} MQTT broker'.format(MQTT_SERVER))
-  for topics in MQTT_SUB_TOPIC:
-      client.subscribe(topics)
-      print('Subscribed to {0}'.format(topics)) 
-  return client
+    global MQTT_CLIENT_ID, MQTT_SERVER, MQTT_SUB_TOPIC, MQTT_USER, MQTT_PASSWORD
+    client = MQTTClient(MQTT_CLIENT_ID, MQTT_SERVER, user=MQTT_USER, password=MQTT_PASSWORD)
+    client.set_callback(on_message)
+    client.connect()
+    print('(CONNACK) Connected to {0} MQTT broker'.format(MQTT_SERVER))
+    for topics in MQTT_SUB_TOPIC:
+        client.subscribe(topics)
+        print('Subscribed to {0}'.format(topics)) 
+    return client
 
 def restart_and_reconnect():
-  print('Failed to connect to MQTT broker. Reconnecting...')
-  sleep(10)
-  machine.reset()
+    print('Failed to connect to MQTT broker. Reconnecting...')
+    sleep(10)
+    machine.reset()
 
 try:
-  mqtt_client = connect_and_subscribe()          # Connect and create the client
+    mqtt_client = connect_and_subscribe()          # Connect and create the client
 except OSError as e:
-  restart_and_reconnect()
+    restart_and_reconnect()
 
 # MQTT setup is successful.
 # Publish generic status confirmation easily seen on MQTT Explorer
@@ -64,5 +64,6 @@ while True:
               motor.resetsteps()
               stepreset = False
               mqtt_client.publish(MQTT_PUB_TOPIC2, "resetstepgauge")
+              #motor.closedebugfile()  # Used for debugging
     except OSError as e:
         restart_and_reconnect()

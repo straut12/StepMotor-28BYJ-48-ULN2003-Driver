@@ -13,10 +13,18 @@ IN1,2,3,4
 """
 from machine import Pin
 from time import sleep_us
+from time import time
+import utime, ujson, uos
 import math
 
 class Stepper:   # command comes from node-red GUI
     def __init__(self, m1pin, m2pin, numbermotors=1):
+        self.debug = False
+        if self.debug:
+            dataFile = "esp32time.csv"
+            mode = "wb" if dataFile in uos.listdir() else "r+" # Create data file and write out header #
+            self.f = open(dataFile, "wb")
+            self.f.write("line,step,time\n")
         self.numbermotors = numbermotors
         if self.numbermotors == 2:
             self.stepperpin = [[Pin(m1pin[0], Pin.OUT),Pin(m1pin[1], Pin.OUT),Pin(m1pin[2], Pin.OUT),Pin(m1pin[3], Pin.OUT)]
@@ -44,6 +52,7 @@ class Stepper:   # command comes from node-red GUI
         self.command = controls
         self.interval = interval
         for i in range(self.numbermotors):
+            if self.debug: t = utime.ticks_us() ##################
             for rotation in range(2):        # Will loop thru Half and Full step and both rotations, CW and CCW
                 #HALF STEP CALCULATION
                 if rotation == 1:            # H is for half-step. Do array rotation (slicing) by 1 place to the right for CW
@@ -75,6 +84,9 @@ class Stepper:   # command comes from node-red GUI
                 self.stepperspeed[i][4] = self.steppercoils[i]["FarrOUT"][0]
             stepspeed = self.command["speed"][i]         # stepspeed is a temporary variable for this loop
 
+            if self.debug: self.f.write("86,calculate coils,{0}\n".format(utime.ticks_diff(utime.ticks_us(), t)/1000)) ################ 
+            if self.debug: t = utime.ticks_us() ##################
+
             # If mode is 1 (incremental stepping) and startstep has been flagged from node-red gui then startstepping
             if self.command["mode"][i] == 1 and stepspeed != 2 and self.command["startstep"][i] == 1:
                 self.startstepping[i] = True
@@ -104,6 +116,9 @@ class Stepper:   # command comes from node-red GUI
                     #print("4:DONE-M1OFF - Motor:{0} Mode:{1} startstep:{2} startstepping:{3} machStep:{4} targetstep:{5}".format(i, self.command["mode"], self.command["startstep"], self.startstepping, self.steppersteps, self.targetstep))
                     self.startstepping[i] = False
 
+            if self.debug: self.f.write("119,increment mode logic,{0}\n".format(utime.ticks_diff(utime.ticks_us(), t)/1000)) #######
+            if self.debug: t = utime.ticks_us() ##################
+
 
             # SEND COIL ARRAY (HIGH PULSES) TO GPIO PINS AND UPDATE STEP COUNTER
             for coil in range(4):
@@ -116,10 +131,15 @@ class Stepper:   # command comes from node-red GUI
                 #print("FULL REVOLUTION -- Motor:{0} Steps:{1} Mode:{2} startstepping:{3} coils:{4}".format(i, self.steppersteps, self.command["mode"], self.startstepping, self.stepperspeed[self.command["speed"]]))
                 self.steppersteps[i] = 0
 
+            if self.debug: self.f.write("135,send pulses to motor,{0}\n".format(utime.ticks_diff(utime.ticks_us(), t)/1000)) ############
+            
+        if self.debug: t = utime.ticks_us() ##################
         sleep_us(int(self.command["delay"][0]*1000))  # delay can be updated from node-red gui. Needs optimal setting for the motors. Currently one delay for all motors
-    
+        if self.debug: self.f.write("139,sleep for motors,{0}\n".format(utime.ticks_diff(utime.ticks_us(), t)/1000)) ###########
+
     def getsteps(self):
         ''' Publish how many steps the motor is at to node red for updating the step gauges in dashboard '''
+        if self.debug: t = utime.ticks_us() ##################
         for i in range(self.numbermotors):
             self.outgoing[0] = False
             stepspeed = self.command["speed"][i]
@@ -129,6 +149,7 @@ class Stepper:   # command comes from node-red GUI
             elif stepspeed != 2 and self.command["mode"][i] == 1 and self.interval[i] == 1 and (math.fabs(self.targetstep[i]) - math.fabs(self.steppersteps[i])) < 50 : # If interval is 1 only send msg update when taking small amount of steps
                 self.outgoing[1][i] = self.steppersteps[i]
                 self.outgoing[0] = True
+        if self.debug: self.f.write("154,getsteps,{0}\n".format(utime.ticks_diff(utime.ticks_us(), t)/1000)) ###########
         if self.outgoing[0]:
             return self.outgoing  # Only return values if one of the motors had an update
 
@@ -150,3 +171,6 @@ class Stepper:   # command comes from node-red GUI
         else:
             stp = stp
         return stp
+
+    def closedebugfile(self):
+        self.f.close()
