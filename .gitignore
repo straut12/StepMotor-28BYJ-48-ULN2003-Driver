@@ -132,3 +132,4 @@ exp_error.log*
 upyStepper/debug/esp32time.csv
 upyStepper/debug/esp32time2.csv
 upyStepper/debug/esp32time3.csv
+pitime.csv

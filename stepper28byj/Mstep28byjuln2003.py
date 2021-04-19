@@ -15,11 +15,9 @@ IN1,2,3,4
 
 from time import sleep
 import RPi.GPIO as GPIO
-import sys, logging, json
+import logging
 from logging.handlers import RotatingFileHandler
 from os import path
-from pathlib import Path
-import paho.mqtt.client as mqtt
 from dataclasses import dataclass
 from typing import List
 
@@ -164,9 +162,9 @@ class Stepper:   # command comes from node-red GUI
             if (abs(self.mach.stepper[i].step) > self.FULLREVOLUTION):  # If hit full revolution reset the step counter. If want to step past full revolution would need to later add a 'not startstepping'
                 self.main_logger.debug("FULL REVOLUTION -- Motor:{0} Steps:{1} Mode:{2} startstepping:{3} coils:{4}".format(i, self.mach.stepper[i].step, self.command["mode"][i], self.startstepping[i], self.mach.stepper[i].speed[self.command["speed"][i]]))
                 self.mach.stepper[i].step = 0
-    
+
         sleep(float(self.command["delay"][i])/1000)  # delay can be updated from node-red gui. Needs optimal setting for the motors.
-    
+
     def getsteps(self):
         ''' PUBLISH HOW MANY STEPS THE MOTOR IS AT TO NODERED GUI '''
         self.outgoing[0] = False
