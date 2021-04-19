@@ -133,3 +133,9 @@ upyStepper/debug/esp32time.csv
 upyStepper/debug/esp32time2.csv
 upyStepper/debug/esp32time3.csv
 pitime.csv
+sandbox.py
+upyStepper/rpm-array-shift-minimal.txt
+upyStepper/rpm-array-shift.txt
+upyStepper/rpm-pre-defined-array-FULLSTEP.txt
+upyStepper/rpm-pre-defined-array-minimal.txt
+upyStepper/rpm-pre-defined-array.txt

@@ -13,7 +13,7 @@ Motor2
 IN1,2,3,4
 """
 
-from time import sleep
+from time import sleep, perf_counter_ns
 import RPi.GPIO as GPIO
 import logging
 from logging.handlers import RotatingFileHandler
@@ -72,6 +72,10 @@ class Stepper:   # command comes from node-red GUI
         self.startstepping = []     # Flag sent from nodered dashboard to start stepping in increment mode
         self.targetstep = []        # When mode1, increment, started a target step is calculated
         self.outgoing = [False,[]]  # Container to get the steps each motor is at for updating nodered dashboard
+        self.rpmtime0 = [perf_counter_ns(), perf_counter_ns()]
+        self.tloop = perf_counter_ns()
+        self.rpmsteps0 = [0, 0]
+        self.rpm = [0,0]
         
         for i in range(len(self.mach.stepper)):          # Setup each stepper motor
             self.mach.stepper[i].speed[2] = [0,0,0,0]    # Speed 2 is hard coded as stop
@@ -93,8 +97,19 @@ class Stepper:   # command comes from node-red GUI
         self.interval = interval
 
         for i in range(len(self.mach.stepper)):   # Loop thru each stepper
-            for rotation in range(2):        # Will loop thru Half and Full step and both rotations, CW and CCW
-                #HALF STEP CALCULATION
+            stepspeed = self.command["speed"][i]         # stepspeed is a temporary variable for this loop
+            if stepspeed > 2:
+                if not self.command["inverse"][i]:       # Inverse flag from node red.
+                    rotation = 1
+                else:
+                    rotation = 0
+            elif stepspeed < 2:
+                if not self.command["inverse"][i]:
+                    rotation = 0
+                else:
+                    rotation = 1
+            
+            if stepspeed == 3 or stepspeed == 1:  # Half step calculation
                 if rotation == 1:            # H is for half-step. Do array rotation (slicing) by 1 place to the right for CW
                     self.mach.stepper[i].coils["HarrOUT"][rotation] = self.mach.stepper[i].coils["Harr1"][rotation][-1:] + self.mach.stepper[i].coils["Harr1"][rotation][:-1]
                     self.mach.stepper[i].coils["Harr1"][rotation] = self.mach.stepper[i].coils["arr2"][rotation]
@@ -103,7 +118,7 @@ class Stepper:   # command comes from node-red GUI
                     self.mach.stepper[i].coils["HarrOUT"][rotation] = self.mach.stepper[i].coils["Harr1"][rotation][1:] + self.mach.stepper[i].coils["Harr1"][rotation][:1]
                     self.mach.stepper[i].coils["Harr1"][rotation] = self.mach.stepper[i].coils["arr3"][rotation]
                     self.mach.stepper[i].coils["arr3"][rotation] = self.mach.stepper[i].coils["HarrOUT"][rotation]
-                #FULL STEP CALCULATION
+            if stepspeed == 4 or stepspeed == 0:  # Full step calculation          
                 if rotation == 1:            # F is for full-step. Do array rotation (slicing) by 1 place to the right for CW
                     self.mach.stepper[i].coils["FarrOUT"][rotation] = self.mach.stepper[i].coils["Farr1"][rotation][-1:] + self.mach.stepper[i].coils["Farr1"][rotation][:-1]
                     self.mach.stepper[i].coils["Farr1"][rotation] = self.mach.stepper[i].coils["FarrOUT"][rotation]
@@ -122,7 +137,7 @@ class Stepper:   # command comes from node-red GUI
                 self.mach.stepper[i].speed[1] = self.mach.stepper[i].coils["HarrOUT"][1]
                 self.mach.stepper[i].speed[3] = self.mach.stepper[i].coils["HarrOUT"][0]
                 self.mach.stepper[i].speed[4] = self.mach.stepper[i].coils["FarrOUT"][0]
-            stepspeed = self.command["speed"][i]         # stepspeed is a temporary variable for this loop
+            
 
             # If mode is 1 (incremental stepping) and startstep has been flagged from node-red gui then startstepping
             if self.command["mode"][i] == 1 and stepspeed != 2 and self.command["startstep"][i] == 1:
@@ -173,10 +188,17 @@ class Stepper:   # command comes from node-red GUI
             if stepspeed != 2 and self.interval[i] > 1 and (abs(self.mach.stepper[i].step) % self.interval[i]) == 2 : # If motor is turning and step is a approx multiple of interval (from nodered gui) then send status to node-red
                 self.outgoing[1][i] = self.mach.stepper[i].step
                 self.outgoing[0] = True
+                rpm = ((self.mach.stepper[i].step - self.rpmsteps0[i])/self.FULLREVOLUTION)/((perf_counter_ns() - self.rpmtime0[i])/60000000000)
+                if rpm > 0:
+                    self.rpm[i] = rpm
+                self.rpmsteps0[i] = self.mach.stepper[i].step
+                self.rpmtime0[i] = perf_counter_ns()
             elif stepspeed != 2 and self.command["mode"][i] == 1 and self.interval[i] == 1 and (abs(self.targetstep[i]) - abs(self.mach.stepper[i].step)) < 50 : # If interval is 1 only send msg update when taking small amount of steps
                 self.outgoing[1][i] = self.mach.stepper[i].step
                 self.outgoing[0] = True
+                self.rpm[i] = 0
         if self.outgoing[0]:
+            print("m0rpm: {0} m1rpm: {1}".format(self.rpm[0], self.rpm[1])) 
             return self.outgoing  # Only return values if one of the motors had an update
 
     def resetsteps(self):

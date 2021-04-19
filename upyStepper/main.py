@@ -49,21 +49,42 @@ print
 sleep(1)
 led.value(0)  # flash led to know main loop starting
 
+checkmsgs = False
+checkdata = False
+
+def checkmessages(msgtimer):
+    global checkmsgs
+    checkmsgs = True
+    
+def checkdata(datatimer):
+    global checkdata
+    checkdata = True
+    
+msgtimer = Timer(1)
+msgtimer.init(period=800, mode=Timer.PERIODIC, callback=checkmessages)
+sleep_ms(400)
+datatimer = Timer(2)
+datatimer.init(period=800, mode=Timer.PERIODIC, callback=checkdata)
+
 #==== MAIN LOOP ======#
 while True:
     try:
-        mqtt_client.check_msg()           
         motor.step(controlsD, interval)  # Main function to drive motors. As msg come in from nodered gui will update controls/interval
-        stepdata = motor.getsteps()      # Get an update on what step each motor is at to update the node red dashboard
-        if stepdata is not None:         # Only send a step update to node red on frequency (based on status increment in node red)
-              for i in range(numbermotors):
-                  outgoingD['steps' + str(i) + 'i'] = stepdata[1][i]
-                  outgoingD['motor' + str(i) + 'i'] = i
-              mqtt_client.publish(MQTT_PUB_TOPIC1, ujson.dumps(outgoingD))
-        if stepreset:  # If step reset trigger received from node red dashboard then reset the steps and reply with command for node red to reset gauge
-              motor.resetsteps()
-              stepreset = False
-              mqtt_client.publish(MQTT_PUB_TOPIC2, "resetstepgauge")
-              #motor.closedebugfile()  # Used for debugging
+        if checkmsgs:
+            #print("check messages")
+            mqtt_client.check_msg()
+            if stepreset:  # If step reset trigger received from node red dashboard then reset the steps and reply with command for node red to reset gauge
+                      motor.resetsteps()
+                      stepreset = False
+                      mqtt_client.publish(MQTT_PUB_TOPIC2, "resetstepgauge")
+            checkmsgs = False       
+        if checkdata:
+            stepdata = motor.getsteps()      # Get an update on what step each motor is at to update the node red dashboard
+            if stepdata is not None:         # Only send a step update to node red on frequency (based on status increment in node red)
+                  for i in range(numbermotors):
+                      outgoingD['steps' + str(i) + 'i'] = stepdata[1][i]
+                      outgoingD['motor' + str(i) + 'i'] = i
+                  mqtt_client.publish(MQTT_PUB_TOPIC1, ujson.dumps(outgoingD))
+            checkdata = False                   
     except OSError as e:
         restart_and_reconnect()

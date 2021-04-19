@@ -1,4 +1,4 @@
-from time import sleep
+from time import sleep, sleep_ms
 from umqttsimple import MQTTClient
 import ubinascii
 import machine
@@ -6,9 +6,9 @@ import micropython
 import network
 import esp
 import re
-from machine import Pin
+from machine import Pin, Timer
 import ujson
-from uMstep28byjuln2003 import Stepper
+from uMstep28byjuln2003B import Stepper
 esp.osdebug(None)
 import gc
 gc.collect()
@@ -36,7 +36,7 @@ WIFI_PASSWORD = stem[3]
 # Initialize global variables
 # controlsD, interval, stepresetare are updated in mqtt on_message
 interval = [97,97]
-controlsD={"delay":[1,1], "speed":[2,2], "mode":[0,0], "inverse":[False,True], "step":[2038,2038], "startstep":[0,0]}
+controlsD={"delay":[0.4,1], "speed":[4,4], "mode":[0,0], "inverse":[True,True], "step":[2038,2038], "startstep":[0,0]}
 stepreset = False    # used to reset steps thru nodered gui
 incomingID = ["entire msg", "lvl2", "lvl3", "datatype"]
 outgoingD = {'motor0i':0, 'motor1i':0}  # need both motors initialized for nodered function
