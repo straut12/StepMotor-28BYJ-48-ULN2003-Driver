@@ -11,15 +11,17 @@ Motor1
 IN1,2,3,4
 
 """
-from machine import Pin, Timer
+from machine import Pin, Timer, freq
 from time import sleep_us
-from time import time
-import utime, ujson, uos
+#from time import time
+import utime, uos
 import math
+
 class Stepper:   # command comes from node-red GUI
-    def __init__(self, m1pin, m2pin, numbermotors=1):
+    def __init__(self, m1pin, m2pin, numbermotors=1, cpuMHz=240000000):
+        freq(cpuMHz)
         self.logconsole = False
-        self.logconsoleRPM = True
+        self.logconsoleRPM = False
         self.logfile = False
         if self.logfile:
             timer = Timer(0)
@@ -41,13 +43,15 @@ class Stepper:   # command comes from node-red GUI
         # Setup and intialize motor parameters
         self.startstepping = [False,False]  # Flag send from node red gui to start stepping in incremental mode
         self.targetstep = [291,291]         # When incremental stepping started will calculate the target step to stop at
-        self.outgoing = [False, [0, 0]]  # Container for getting how many steps each motor is at. Boolean is flag if there is valid results
         self.rpmtime0 = [utime.ticks_us(), utime.ticks_us()]
         self.tloop = utime.ticks_us()
         self.rpmsteps0 = [0, 0]
         self.rpm = [0,0]
         self.seq = [0,0]
+        self.delay = 0   # Keep track of total delay/pause after sending pulses to motors
         self.closefile = False
+        self.timeus = [utime.ticks_us(), utime.ticks_us()] # monitor how long each motor loop takes (coil logic only)
+        self.timems = [utime.ticks_us(), utime.ticks_us()] # monitor how long each motor loop takes (coil logic + delay)
         for i in range(self.numbermotors):
             self.stepperspeed[i][2] = [0,0,0,0]  # speed 2 is hard coded as stop
             for rotation in range(2):        # Setup each pin in each stepper
@@ -77,18 +81,20 @@ class Stepper:   # command comes from node-red GUI
         self.command = controls
         self.interval = interval
         for i in range(self.numbermotors):
+            self.timeus[i] = utime.ticks_us() # time counter for monitoring how long the loop takes
             if self.logfile: t0 = utime.ticks_us() ##################
             stepspeed = self.command["speed"][i]         # Speed from node red. stepspeed is a local variable for this loop
+            self.delay = self.command["delay"][0]
             if stepspeed > 2:
                 if not self.command["inverse"][i]:       # Inverse flag from node red.
-                    rotation = 1
-                else:
                     rotation = 0
+                else:
+                    rotation = 1
             elif stepspeed < 2:
                 if not self.command["inverse"][i]:
-                    rotation = 0
-                else:
                     rotation = 1
+                else:
+                    rotation = 0
             if stepspeed == 3 or stepspeed == 1:  # Half step calculation
                 self.stepperspeed[i][stepspeed] = self.steppercoils[i]["Half"][rotation][self.seq[i]]
                 self.seq[i] = self._Hsequpdate(rotation, self.seq[i])
@@ -97,6 +103,7 @@ class Stepper:   # command comes from node-red GUI
                     self.seq[i] = 3
                 self.stepperspeed[i][stepspeed] = self.steppercoils[i]["Full"][rotation][self.seq[i]]
                 self.seq[i] = self._Fsequpdate(rotation, self.seq[i])
+                self.delay = self.command["delay"][0] + self.command["delay"][1] # Add extra delay (updated from nodered) for full step
                 
             if self.logfile: self.f.write("calculate-coils,{0}\n".format(utime.ticks_diff(utime.ticks_us(), t0))) ################ 
             if self.logfile: t0 = utime.ticks_us() ##################
@@ -146,32 +153,25 @@ class Stepper:   # command comes from node-red GUI
                 self.steppersteps[i] = 0
 
             if self.logfile: self.f.write("send-pulses-to-motor,{0}\n".format(utime.ticks_diff(utime.ticks_us(), t0))) ############
-        
+            
+            self.timeus[i] = utime.ticks_diff(utime.ticks_us(), self.timeus[i])
+            self.timems[i] = (self.timeus[i]/1000) + self.delay
         # DELAY FOR MOTORS TO UPDATE
-        if self.logfile: t0 = utime.ticks_us() ##################
-        sleep_us(int(self.command["delay"][0]*1000))  # delay can be updated from node-red gui. Needs optimal setting for the motors. Currently one delay for all motors
+        if self.logfile: t0 = utime.ticks_us() #################
+        sleep_us(int(self.delay*1000))  # delay can be updated from node-red gui. Needs optimal setting for the motors. Currently one delay for all motors
         if self.logfile: self.f.write("sleep-for-motors,{0}\n".format(utime.ticks_diff(utime.ticks_us(), t0))) ###########
     
-    def getsteps(self):
-        ''' Publish how many steps the motor is at to node red for updating the step gauges in dashboard '''
-        if self.logfile: t0 = utime.ticks_us() ##################
+    def getdata(self):
+        ''' Publish how many steps, rpms, etc the motor is at (node red will use to update dashboard) '''
         for i in range(self.numbermotors):
-            self.outgoing[0] = False
-            stepspeed = self.command["speed"][i]
-            if stepspeed != 2:
-                self.outgoing[1][i] = self.steppersteps[i]
-                self.outgoing[0] = True
-                rpm = ((self.steppersteps[i]-self.rpmsteps0[i])/self.FULLREVOLUTION)/(utime.ticks_diff(utime.ticks_us(), self.rpmtime0[i])/60000000)
-                if rpm > 0:
-                    self.rpm[i] = rpm
-                self.rpmsteps0[i] = self.steppersteps[i]
-                self.rpmtime0[i] = utime.ticks_us()
-            else:
-                self.rpm[i] = 0
-        if self.logconsoleRPM: print("m0rpm: {0} m1rpm: {1}".format(self.rpm[0], self.rpm[1]))    
-        if self.logfile: self.f.write("getsteps,{0}\n".format(utime.ticks_diff(utime.ticks_us(), t0))) ###########
-        if self.outgoing[0]:    
-            return self.outgoing  # Only return values if one of the motors had an update
+            rpm = ((self.steppersteps[i]-self.rpmsteps0[i])/self.FULLREVOLUTION)/(utime.ticks_diff(utime.ticks_us(), self.rpmtime0[i])/60000000)
+            if rpm >= 0:
+                self.rpm[i] = rpm
+            self.rpmsteps0[i] = self.steppersteps[i] # reset rpm counters for next calculation
+            self.rpmtime0[i] = utime.ticks_us()
+        if self.logconsoleRPM: print("m0rpm: {0} m1rpm: {1}".format(self.rpm[0], self.rpm[1]))
+        cpufreq = int(freq()/1000000)
+        return self.steppersteps, self.rpm, self.timems, cpufreq, self.command["speed"], self.delay
 
     def resetsteps(self):
         ''' Reset the step counters on all motors '''

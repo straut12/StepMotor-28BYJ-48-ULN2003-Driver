@@ -47,6 +47,7 @@ def setup_logging(log_dir):
     main_logger.addHandler(exp_errors_file_handler)
     return main_logger
 
+#======== SETUP CLASSES ======== #
 @dataclass
 class StepperMotor:
     pins: list       # Pins connected to ULN2003 IN1,2,3,4
@@ -70,18 +71,27 @@ class Stepper:   # command comes from node-red GUI
         # Setup and intialize motor parameters
         GPIO.setmode(GPIO.BCM)
         self.startstepping = []     # Flag sent from nodered dashboard to start stepping in increment mode
-        self.targetstep = []        # When mode1, increment, started a target step is calculated
-        self.outgoing = [False,[]]  # Container to get the steps each motor is at for updating nodered dashboard
-        self.rpmtime0 = [perf_counter_ns(), perf_counter_ns()]
-        self.tloop = perf_counter_ns()
-        self.rpmsteps0 = [0, 0]
-        self.rpm = [0,0]
+        self.targetstep = []        # When in mode1/increment a target step is calculated.
+        self.reportsteps = [False,[]]  # Container to get the steps each motor is at for updating nodered dashboard
+        self.rpmtime0 = [] # used for rpm calculation
+        self.tloop = perf_counter_ns() # debugging tool
+        self.rpmsteps0 = []
+        self.rpm = []
+        self.delay = 0   # Container to store loop delay
+        self.timens = []  # monitor how long each motor loop takes (coil logic only)
+        self.timems = [] # monitor how long each motor loop takes (coil logic + delay)
+        self.getdataD = {}
         
         for i in range(len(self.mach.stepper)):          # Setup each stepper motor
             self.mach.stepper[i].speed[2] = [0,0,0,0]    # Speed 2 is hard coded as stop
-            self.outgoing[1].append(0)
-            self.startstepping.append(False)  # Flag for increment stepping function
-            self.targetstep.append(291)         # Increment target step. Will be updated with nodered gui
+            self.reportsteps[1].append(0)
+            self.startstepping.append(False)  
+            self.targetstep.append(291)         
+            self.rpmtime0.append(perf_counter_ns())
+            self.rpmsteps0.append(0)
+            self.rpm.append(0)
+            self.timens.append(perf_counter_ns())
+            self.timems.append(perf_counter_ns())
             for rotation in range(2):        # Setup each pin in each stepper
                 self.mach.stepper[i].coils["Harr1"][rotation] = [0,0,1,1]
                 self.mach.stepper[i].coils["Farr1"][rotation] = [0,0,1,1]
@@ -95,8 +105,9 @@ class Stepper:   # command comes from node-red GUI
         ''' LOOP THRU EACH STEPPER AND THE TWO ROTATIONS (CW/CCW) AND SEND COIL ARRAY (HIGH PULSES) '''
         self.command = incomingD
         self.interval = interval
-
+        self.delay = self.command["delay"][0]        # First delay is half step loop pause. Second value is add-on for full step.
         for i in range(len(self.mach.stepper)):   # Loop thru each stepper
+            self.timens[i] = perf_counter_ns() # time counter for monitoring how long the loop takes
             stepspeed = self.command["speed"][i]         # stepspeed is a temporary variable for this loop
             if stepspeed > 2:
                 if not self.command["inverse"][i]:       # Inverse flag from node red.
@@ -119,6 +130,7 @@ class Stepper:   # command comes from node-red GUI
                     self.mach.stepper[i].coils["Harr1"][rotation] = self.mach.stepper[i].coils["arr3"][rotation]
                     self.mach.stepper[i].coils["arr3"][rotation] = self.mach.stepper[i].coils["HarrOUT"][rotation]
             if stepspeed == 4 or stepspeed == 0:  # Full step calculation          
+                self.delay = self.command["delay"][0] + self.command["delay"][1] # Add extra delay for full step
                 if rotation == 1:            # F is for full-step. Do array rotation (slicing) by 1 place to the right for CW
                     self.mach.stepper[i].coils["FarrOUT"][rotation] = self.mach.stepper[i].coils["Farr1"][rotation][-1:] + self.mach.stepper[i].coils["Farr1"][rotation][:-1]
                     self.mach.stepper[i].coils["Farr1"][rotation] = self.mach.stepper[i].coils["FarrOUT"][rotation]
@@ -172,38 +184,34 @@ class Stepper:   # command comes from node-red GUI
             # SEND COIL ARRAY (HIGH PULSES) TO GPIO PINS AND UPDATE STEP COUNTER
             GPIO.output(self.mach.stepper[i].pins, self.mach.stepper[i].speed[stepspeed]) # output the coil array (speed/direction) to the GPIO pins.
             self.mach.stepper[i].step = self.stepupdate(stepspeed, self.mach.stepper[i].step)  # update the motor step based on direction and half vs full step
+            
             # IF FULL REVOLUTION - reset the step counter
             self.main_logger.debug("FULL REVOLUTION -- Motor:{0} Steps:{1} Mode:{2} startstepping:{3} coils:{4}".format(i, self.mach.stepper[i].step, self.command["mode"][i], self.startstepping[i], self.mach.stepper[i].speed[self.command["speed"][i]]))
             if (abs(self.mach.stepper[i].step) > self.FULLREVOLUTION):  # If hit full revolution reset the step counter. If want to step past full revolution would need to later add a 'not startstepping'
                 self.main_logger.debug("FULL REVOLUTION -- Motor:{0} Steps:{1} Mode:{2} startstepping:{3} coils:{4}".format(i, self.mach.stepper[i].step, self.command["mode"][i], self.startstepping[i], self.mach.stepper[i].speed[self.command["speed"][i]]))
                 self.mach.stepper[i].step = 0
+            
+            # Timers to monitor how long the loops is taking
+            self.timens[i] = perf_counter_ns() - self.timens[i]
+            self.timems[i] = (self.timens[i]/1000000) + self.delay
+        sleep(float(self.delay/1000))  # delay can be updated from node-red gui. Needs optimal setting for the motors.
 
-        sleep(float(self.command["delay"][i])/1000)  # delay can be updated from node-red gui. Needs optimal setting for the motors.
-
-    def getsteps(self):
-        ''' PUBLISH HOW MANY STEPS THE MOTOR IS AT TO NODERED GUI '''
-        self.outgoing[0] = False
+    def getdata(self):
+        ''' RETURN MOTOR DATA INCLUDING STEPS, RPMS, ETC '''
         for i in range(len(self.mach.stepper)):
-            stepspeed = self.command["speed"][i]
-            if stepspeed != 2 and self.interval[i] > 1 and (abs(self.mach.stepper[i].step) % self.interval[i]) == 2 : # If motor is turning and step is a approx multiple of interval (from nodered gui) then send status to node-red
-                self.outgoing[1][i] = self.mach.stepper[i].step
-                self.outgoing[0] = True
-                rpm = ((self.mach.stepper[i].step - self.rpmsteps0[i])/self.FULLREVOLUTION)/((perf_counter_ns() - self.rpmtime0[i])/60000000000)
-                if rpm >= 0:
-                    self.rpm[i] = rpm
-                self.rpmsteps0[i] = self.mach.stepper[i].step
-                self.rpmtime0[i] = perf_counter_ns()
-            elif stepspeed != 2 and self.command["mode"][i] == 1 and self.interval[i] == 1 and (abs(self.targetstep[i]) - abs(self.mach.stepper[i].step)) < 50 : # If interval is 1 only send msg update when taking small amount of steps
-                self.outgoing[1][i] = self.mach.stepper[i].step
-                self.outgoing[0] = True
-                self.rpm[i] = 0
-            else:
-                self.rpm[i] = 0
-        if self.outgoing[0]:
-            #print("outgoing: {0} rpm: {1} ".format(self.outgoing, self.rpm)) 
-            return self.outgoing, self.rpm  # Only return values if one of the motors had an update
-        else:
-            return "na", "na"
+            rpm = ((self.mach.stepper[i].step - self.rpmsteps0[i])/self.FULLREVOLUTION)/((perf_counter_ns() - self.rpmtime0[i])/60000000000)
+            if rpm >= 0:
+                self.rpm[i] = rpm
+            self.rpmsteps0[i] = self.mach.stepper[i].step
+            self.rpmtime0[i] = perf_counter_ns()
+            self.getdataD['steps' + str(i) + 'i'] = self.mach.stepper[i].step
+            self.getdataD['rpm'+ str(i) + 'f'] = self.rpm[i]
+            self.getdataD['looptime'+ str(i) + 'f'] = self.timems[i]
+            self.getdataD['speed'+ str(i) + 'i'] = self.command["speed"][i]
+        self.getdataD['delayf'] = self.delay
+        f = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
+        self.getdataD['cpufreqi'] = int(int(f.read()) / 1000)
+        return self.getdataD
 
     def resetsteps(self):
         for i in range(len(self.mach.stepper)):
@@ -231,8 +239,8 @@ if __name__ == "__main__":
     #logging.basicConfig(level=logging.DEBUG) # Too many debug output lines. Need to use file logging with RotatingFileHandler instead of basicConfig.
     main_logger = setup_logging(path.dirname(path.abspath(__file__)))
     main_logger.info("setup logging module")
-    outgoing = []
-    incomingD={"delay":[1.6,1.6], "speed":[3,3], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
+    reportsteps = []
+    incomingD={"delay":[0.8,1.0], "speed":[3,3], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
     interval = [97, 97]
     m1pins = [12, 16, 20, 21]
     m2pins = [19, 13, 6, 5]
@@ -240,9 +248,9 @@ if __name__ == "__main__":
     try:
         while True:
             motor.step(incomingD, interval) # Pass instructions for stepper motor for testing
-            outgoingA = motor.getsteps()
-            if outgoingA is not None:
-                print(outgoingA[1])
+            reportstepsA = motor.getdata()
+            if reportstepsA is not None:
+                print(reportstepsA[1])
     except KeyboardInterrupt:
         main_logger.info("Pressed ctrl-C")
     finally:

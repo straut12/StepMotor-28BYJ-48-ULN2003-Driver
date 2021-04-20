@@ -22,6 +22,7 @@ import paho.mqtt.client as mqtt
 from dataclasses import dataclass
 from typing import List
 import stepper28byj
+from time import perf_counter
 
 if __name__ == "__main__":
 
@@ -73,14 +74,14 @@ if __name__ == "__main__":
     MQTT_SUB_TOPIC.append('nred2pi/stepperZCMD/+')
     #MQTT_SUB_TOPIC.append('nred2pi/servoZCMD/+')
     MQTT_REGEX = r'nred2pi/([^/]+)/([^/]+)'
-    MQTT_PUB_TOPIC1 = 'pi2nred/stepperZDATA/motoristepsi'
+    MQTT_PUB_TOPIC1 = 'pi2nred/stepperZDATA/motordata'
     MQTT_PUB_TOPIC2 = 'pi2nred/nredZCMD/resetstepgauge'
 
     # Initialize on_message array/variables. From here on will be updated by node-red gui thru user input. Main controller for stepper motors.
     stepreset = False   # used to reset steps thru nodered gui
     outgoingD = {}
-    controlsD = {"delay":[1.6,1.6], "speed":[2,2], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
-    interval = [97,97]
+    mqttControlsD = {"delay":[0.8,1.0], "speed":[3,3], "mode":[0,0], "inverse":[False,False], "step":[2038, 2038], "startstep":[0,0]}
+    mqttInterval = [97,97]
     incomingID = ["entire msg", "lvl2", "lvl3", "datatype"]
     
     mqtt_client = mqtt.Client(MQTT_CLIENT_ID) # Create mqtt_client object
@@ -101,15 +102,15 @@ if __name__ == "__main__":
 
     def on_message(client, userdata, msg):
         """on message callback will receive messages from the server/broker. Must be subscribed to the topic in on_connect"""
-        global incomingID, controlsD, interval, stepreset
+        global incomingID, mqttControlsD, mqttInterval, stepreset
         msgmatch = re.match(MQTT_REGEX, msg.topic)
         if msgmatch:
             incomingD = json.loads(str(msg.payload.decode("utf-8", "ignore"))) # decode json data
             incomingID = [msgmatch.group(0), msgmatch.group(1), msgmatch.group(2), type(incomingD)]
             if incomingID[2] == 'controls':
-                controlsD = incomingD
+                mqttControlsD = incomingD
             elif incomingID[2] == 'interval':
-                interval = incomingD
+                mqttInterval = incomingD
             elif incomingID[2] == 'stepreset':
                 stepreset = incomingD
         # Debugging. Will print the JSON incoming payload and unpack the converted dictionary
@@ -160,21 +161,20 @@ if __name__ == "__main__":
         mqtt_client.loop_stop()
         sys.exit()
     
-    # MQTT setup is successful. Initialize dictionaries and start the main loop.    
+    # MQTT setup is successful. Initialize dictionaries and start the main loop.   
+    t0 = perf_counter() # Need to update interval in  node-red dashboard to link to perf_counter 
     try:
         while True:
-            motor.step(controlsD, interval) # Pass instructions for stepper motor for testing
-            stepdata, rpm = motor.getsteps()
-            if stepdata != "na":
-                for i, items in enumerate(stepdata[1]):
-                    outgoingD['motori'] = i
-                    outgoingD['stepsi'] = stepdata[1][i]
-                    outgoingD['rpmi'] = rpm[i]
-                    mqtt_client.publish(MQTT_PUB_TOPIC1, json.dumps(outgoingD))
-            if stepreset:
-                motor.resetsteps()
-                stepreset = False
-                mqtt_client.publish(MQTT_PUB_TOPIC2, "resetstepgauge")
+            motor.step(mqttControlsD, mqttInterval) # Pass instructions for stepper motor for testing
+            if (perf_counter() - t0) > 0.1:
+                stepperdata = motor.getdata()
+                if stepperdata != "na":
+                    mqtt_client.publish(MQTT_PUB_TOPIC1, json.dumps(stepperdata))
+                if stepreset:
+                    motor.resetsteps()
+                    stepreset = False
+                    mqtt_client.publish(MQTT_PUB_TOPIC2, "resetstepgauge")
+                t0 = perf_counter()
     except KeyboardInterrupt:
         main_logger.info("Pressed ctrl-C")
     finally:

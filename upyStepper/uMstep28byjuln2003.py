@@ -153,7 +153,7 @@ class Stepper:   # command comes from node-red GUI
         #sleep_us(int(self.command["delay"][0]*1000))  # delay can be updated from node-red gui. Needs optimal setting for the motors. Currently one delay for all motors
         #if self.logfile: self.f.write("sleep-for-motors,{0}\n".format(utime.ticks_diff(utime.ticks_us(), t0))) ###########
 
-    def getsteps(self):
+    def getdata(self):
         ''' Publish how many steps the motor is at to node red for updating the step gauges in dashboard '''
         if self.logfile: t0 = utime.ticks_us() ##################
         for i in range(self.numbermotors):
