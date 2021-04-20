@@ -189,7 +189,7 @@ class Stepper:   # command comes from node-red GUI
                 self.outgoing[1][i] = self.mach.stepper[i].step
                 self.outgoing[0] = True
                 rpm = ((self.mach.stepper[i].step - self.rpmsteps0[i])/self.FULLREVOLUTION)/((perf_counter_ns() - self.rpmtime0[i])/60000000000)
-                if rpm > 0:
+                if rpm >= 0:
                     self.rpm[i] = rpm
                 self.rpmsteps0[i] = self.mach.stepper[i].step
                 self.rpmtime0[i] = perf_counter_ns()
@@ -197,9 +197,13 @@ class Stepper:   # command comes from node-red GUI
                 self.outgoing[1][i] = self.mach.stepper[i].step
                 self.outgoing[0] = True
                 self.rpm[i] = 0
+            else:
+                self.rpm[i] = 0
         if self.outgoing[0]:
-            print("m0rpm: {0} m1rpm: {1}".format(self.rpm[0], self.rpm[1])) 
-            return self.outgoing  # Only return values if one of the motors had an update
+            #print("outgoing: {0} rpm: {1} ".format(self.outgoing, self.rpm)) 
+            return self.outgoing, self.rpm  # Only return values if one of the motors had an update
+        else:
+            return "na", "na"
 
     def resetsteps(self):
         for i in range(len(self.mach.stepper)):

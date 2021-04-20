@@ -164,11 +164,12 @@ if __name__ == "__main__":
     try:
         while True:
             motor.step(controlsD, interval) # Pass instructions for stepper motor for testing
-            stepdata = motor.getsteps()
-            if stepdata is not None:
+            stepdata, rpm = motor.getsteps()
+            if stepdata != "na":
                 for i, items in enumerate(stepdata[1]):
                     outgoingD['motori'] = i
                     outgoingD['stepsi'] = stepdata[1][i]
+                    outgoingD['rpmi'] = rpm[i]
                     mqtt_client.publish(MQTT_PUB_TOPIC1, json.dumps(outgoingD))
             if stepreset:
                 motor.resetsteps()
