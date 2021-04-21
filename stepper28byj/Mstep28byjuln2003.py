@@ -92,7 +92,7 @@ class Stepper:   # command comes from node-red GUI
             self.rpm.append(0)
             self.timens.append(perf_counter_ns())
             self.timems.append(perf_counter_ns())
-            for rotation in range(2):        # Setup each pin in each stepper
+            for rotation in range(2):        # Setup starting array for each rotation (CW,CCW) and H-half/F-full step
                 self.mach.stepper[i].coils["Harr1"][rotation] = [0,0,1,1]
                 self.mach.stepper[i].coils["Farr1"][rotation] = [0,0,1,1]
                 self.mach.stepper[i].coils["arr2"][rotation] = [0,0,0,1]
