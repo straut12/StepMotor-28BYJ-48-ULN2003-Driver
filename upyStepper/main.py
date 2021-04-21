@@ -76,10 +76,13 @@ sleep_ms(200)
 pubtimer = Timer(3)
 pubtimer.init(period=600, mode=Timer.PERIODIC, callback=sendmessages)
 
+t0loop_us = utime.ticks_us()
 #==== MAIN LOOP ========#
 while True:
     try:
         motor.step(controlsD, interval)  # Main function to drive motors. As msg come in from nodered gui will update controls and mode1 increment interval.
+        t0main_us = utime.ticks_diff(utime.ticks_us(), t0loop_us)
+        t0loop_us = utime.ticks_us() 
         if checkmsgs:
             #print("check messages")
             mqtt_client.check_msg()
@@ -98,6 +101,7 @@ while True:
                 outgoingD['cpufreqi'] = cpufreq
                 outgoingD['speed' + str(i) + 'i'] = speed[i]
                 outgoingD['delayf'] = delay
+                outgoingD['main_msf'] = t0main_us / 1000
             checkdata = False
         if sendmsgs:
             mqtt_client.publish(MQTT_PUB_TOPIC1, ujson.dumps(outgoingD)) # Send motor data (steps, rpm, etc) back to node-red dashboard

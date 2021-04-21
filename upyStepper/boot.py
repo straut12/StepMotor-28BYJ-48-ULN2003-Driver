@@ -1,4 +1,5 @@
 from time import time, sleep, sleep_us, sleep_ms
+import utime
 from umqttsimple import MQTTClient
 import ubinascii
 import machine

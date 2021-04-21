@@ -22,7 +22,7 @@ import paho.mqtt.client as mqtt
 from dataclasses import dataclass
 from typing import List
 import stepper28byj
-from time import perf_counter
+from time import perf_counter, perf_counter_ns
 
 if __name__ == "__main__":
 
@@ -159,19 +159,25 @@ if __name__ == "__main__":
         sys.exit()
     
     # MQTT setup is successful. Initialize dictionaries and start the main loop.   
-    t0 = perf_counter() # Need to update interval in  node-red dashboard to link to perf_counter 
+    t0_sec = perf_counter() # sec Counter for getting stepper data. Future feature - update interval in  node-red dashboard to link to perf_counter
+    msginterval = 0.1       # Adjust interval to increase/decrease number of mqtt updates.
+    t0loop_ns = perf_counter_ns() # nanosec Counter for how long it takes to run motor and get messages
+    
     try:
         while True:
             motor.step(mqttControlsD) # Pass instructions for stepper motor for testing
-            if (perf_counter() - t0) > 0.1:
+            t0main_ns = perf_counter_ns() - t0loop_ns
+            t0loop_ns = perf_counter_ns()
+            if (perf_counter() - t0_sec) > msginterval:
                 stepperdata = motor.getdata()
                 if stepperdata != "na":
+                    stepperdata["main_msf"] = t0main_ns/1000000
                     mqtt_client.publish(MQTT_PUB_TOPIC1, json.dumps(stepperdata))
                 if mqttstepreset:
                     motor.resetsteps()
                     mqttstepreset = False
                     mqtt_client.publish(MQTT_PUB_TOPIC2, "resetstepgauge")
-                t0 = perf_counter()
+                t0_sec = perf_counter()
     except KeyboardInterrupt:
         main_logger.info("Pressed ctrl-C")
     finally:
