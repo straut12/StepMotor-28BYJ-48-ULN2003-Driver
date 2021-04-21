@@ -32,7 +32,7 @@ logging.info("GPIO version: {0}".format(GPIO.VERSION))
 # Create list for each motor
 motor1 = [12,16,20,21]
 motor2 = [19,13,6,5]
-delay=.001 # delay between each sequence step. .001 is the fast the motors would still function
+delay=.001 # delay between each sequence step. 
 
 # Use BCM GPIO references
 # instead of physical pin numbers

@@ -54,7 +54,7 @@ class Stepper:   # command comes from node-red GUI
         self.timems = [utime.ticks_us(), utime.ticks_us()] # monitor how long each motor loop takes (coil logic + delay)
         for i in range(self.numbermotors):
             self.stepperspeed[i][2] = [0,0,0,0]  # speed 2 is hard coded as stop
-            for rotation in range(2):        # Setup each pin in each stepper
+            for rotation in range(2):        # Setup half/full arrays for both CW and CCW
                 self.steppercoils[i]["Half"][rotation] = [
                                                         [1,0,0,1],
                                                         [1,0,0,0],
