@@ -50,7 +50,7 @@ class Stepper:   # command comes from node-red GUI
         self.seq = [0,0]
         self.delay = 0   # Keep track of total delay/pause after sending pulses to motors
         self.closefile = False
-        self.timeus = [utime.ticks_us(), utime.ticks_us()] # monitor how long each motor loop takes (coil logic only)
+        self.timem = [utime.ticks_us(), utime.ticks_us()] # monitor how long each motor loop takes (coil logic only)
         self.timems = [utime.ticks_us(), utime.ticks_us()] # monitor how long each motor loop takes (coil logic + delay)
         for i in range(self.numbermotors):
             self.stepperspeed[i][2] = [0,0,0,0]  # speed 2 is hard coded as stop
@@ -81,7 +81,7 @@ class Stepper:   # command comes from node-red GUI
         self.command = controls
         self.interval = interval
         for i in range(self.numbermotors):
-            self.timeus[i] = utime.ticks_us() # time counter for monitoring how long the loop takes
+            self.timem[i] = utime.ticks_us() # time counter for monitoring how long the loop takes
             if self.logfile: t0 = utime.ticks_us() ##################
             stepspeed = self.command["speed"][i]         # Speed from node red. stepspeed is a local variable for this loop
             self.delay = self.command["delay"][0]
@@ -154,8 +154,8 @@ class Stepper:   # command comes from node-red GUI
 
             if self.logfile: self.f.write("send-pulses-to-motor,{0}\n".format(utime.ticks_diff(utime.ticks_us(), t0))) ############
             
-            self.timeus[i] = utime.ticks_diff(utime.ticks_us(), self.timeus[i])
-            self.timems[i] = (self.timeus[i]/1000) + self.delay
+            self.timem[i] = utime.ticks_diff(utime.ticks_us(), self.timem[i])
+            self.timems[i] = (self.timem[i]/1000) + self.delay
         # DELAY FOR MOTORS TO UPDATE
         if self.logfile: t0 = utime.ticks_us() #################
         sleep_us(int(self.delay*1000))  # delay can be updated from node-red gui. Needs optimal setting for the motors. Currently one delay for all motors

@@ -101,10 +101,9 @@ class Stepper:   # command comes from node-red GUI
                 GPIO.setup(pin,GPIO.OUT)
                 self.main_logger.info("pin {0} Setup".format(pin))
 
-    def step(self, incomingD, interval):
+    def step(self, incomingD):
         ''' LOOP THRU EACH STEPPER AND THE TWO ROTATIONS (CW/CCW) AND SEND COIL ARRAY (HIGH PULSES) '''
         self.command = incomingD
-        self.interval = interval
         self.delay = self.command["delay"][0]        # First delay is half step loop pause. Second value is add-on for full step.
         for i in range(len(self.mach.stepper)):   # Loop thru each stepper
             self.timens[i] = perf_counter_ns() # time counter for monitoring how long the loop takes
@@ -241,13 +240,12 @@ if __name__ == "__main__":
     main_logger.info("setup logging module")
     reportsteps = []
     incomingD={"delay":[0.8,1.0], "speed":[3,3], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
-    interval = [97, 97]
     m1pins = [12, 16, 20, 21]
     m2pins = [19, 13, 6, 5]
     motor = Stepper(m1pins, m2pins)  # can enter 1 to 2 list of pins (up to 2 motors)
     try:
         while True:
-            motor.step(incomingD, interval) # Pass instructions for stepper motor for testing
+            motor.step(incomingD) # Pass instructions for stepper motor for testing
             reportstepsA = motor.getdata()
             if reportstepsA is not None:
                 print(reportstepsA[1])
