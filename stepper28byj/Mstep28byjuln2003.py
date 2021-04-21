@@ -109,16 +109,10 @@ class Stepper:   # command comes from node-red GUI
             self.timens[i] = perf_counter_ns() # time counter for monitoring how long the loop takes
             stepspeed = self.command["speed"][i]         # stepspeed is a temporary variable for this loop
             if stepspeed > 2:
-                if not self.command["inverse"][i]:       # Inverse flag from node red.
-                    rotation = 1
-                else:
-                    rotation = 0
+                rotation = 0 if self.command["inverse"][i] else 1
             elif stepspeed < 2:
-                if not self.command["inverse"][i]:
-                    rotation = 0
-                else:
-                    rotation = 1
-            
+                rotation = 1 if self.command["inverse"][i] else 0
+                
             if stepspeed == 3 or stepspeed == 1:  # Half step calculation
                 if rotation == 1:            # H is for half-step. Do array rotation (slicing) by 1 place to the right for CW
                     self.mach.stepper[i].coils["HarrOUT"][rotation] = self.mach.stepper[i].coils["Harr1"][rotation][-1:] + self.mach.stepper[i].coils["Harr1"][rotation][:-1]
@@ -239,16 +233,13 @@ if __name__ == "__main__":
     main_logger = setup_logging(path.dirname(path.abspath(__file__)))
     main_logger.info("setup logging module")
     reportsteps = []
-    incomingD={"delay":[0.8,1.0], "speed":[3,3], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
+    incomingD={"delay":[0.8,1.0], "speed":[3,3], "mode":[0,0], "inverse":[False,False], "step":[2038, 2038], "startstep":[0,0]}
     m1pins = [12, 16, 20, 21]
     m2pins = [19, 13, 6, 5]
     motor = Stepper(m1pins, m2pins)  # can enter 1 to 2 list of pins (up to 2 motors)
     try:
         while True:
             motor.step(incomingD) # Pass instructions for stepper motor for testing
-            reportstepsA = motor.getdata()
-            if reportstepsA is not None:
-                print(reportstepsA[1])
     except KeyboardInterrupt:
         main_logger.info("Pressed ctrl-C")
     finally:
