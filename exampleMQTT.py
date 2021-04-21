@@ -62,7 +62,7 @@ if __name__ == "__main__":
     # Create mqtt_client object
     # Define callback functions
 
-    home = str(Path.home())                    # Import mqtt and wifi info. Remove if hard coding in python script
+    home = str(Path.home())                       # Import mqtt and wifi info. Remove if hard coding in python script
     with open(path.join(home, "stem"),"r") as f:
         user_info = f.read().splitlines()
 
@@ -78,11 +78,10 @@ if __name__ == "__main__":
     MQTT_PUB_TOPIC2 = 'pi2nred/nredZCMD/resetstepgauge'
 
     # Initialize on_message array/variables. From here on will be updated by node-red gui thru user input. Main controller for stepper motors.
-    stepreset = False   # used to reset steps thru nodered gui
-    outgoingD = {}
-    mqttControlsD = {"delay":[0.8,1.0], "speed":[3,3], "mode":[0,0], "inverse":[False,False], "step":[2038, 2038], "startstep":[0,0]}
-    mqttInterval = [97,97]
-    incomingID = ["entire msg", "lvl2", "lvl3", "datatype"]
+    mqttstepreset = False   # used to reset steps thru nodered gui
+    outgoingD = {}          # container for decoding mqtt json payload
+    mqttControlsD = {"delay":[0.8,1.0], "speed":[2,2], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
+    incomingID = ["entire msg", "lvl2", "lvl3", "datatype"]  # break mqtt topic into levels: lvl1/lvl2/lvl3
     
     mqtt_client = mqtt.Client(MQTT_CLIENT_ID) # Create mqtt_client object
     
@@ -91,7 +90,7 @@ if __name__ == "__main__":
         global MQTT_SUB_TOPIC
         main_logger.info("attempting on_connect")
         if rc==0:
-            mqtt_client.connected = True          # If rc = 0 then successful connection
+            mqtt_client.connected = True
             for topic in MQTT_SUB_TOPIC:
                 client.subscribe(topic)
                 main_logger.info("Subscribed to: {0}\n".format(topic))
@@ -102,17 +101,15 @@ if __name__ == "__main__":
 
     def on_message(client, userdata, msg):
         """on message callback will receive messages from the server/broker. Must be subscribed to the topic in on_connect"""
-        global incomingID, mqttControlsD, mqttInterval, stepreset
-        msgmatch = re.match(MQTT_REGEX, msg.topic)
+        global incomingID, mqttControlsD, mqttstepreset
+        msgmatch = re.match(MQTT_REGEX, msg.topic)   # Check for match to subscribed topics
         if msgmatch:
-            incomingD = json.loads(str(msg.payload.decode("utf-8", "ignore"))) # decode json data
-            incomingID = [msgmatch.group(0), msgmatch.group(1), msgmatch.group(2), type(incomingD)]
+            incomingD = json.loads(str(msg.payload.decode("utf-8", "ignore"))) 
+            incomingID = [msgmatch.group(0), msgmatch.group(1), msgmatch.group(2), type(incomingD)] # breaks msg topic into groups - group/group1/group2
             if incomingID[2] == 'controls':
                 mqttControlsD = incomingD
-            elif incomingID[2] == 'interval':
-                mqttInterval = incomingD
             elif incomingID[2] == 'stepreset':
-                stepreset = incomingD
+                mqttstepreset = incomingD
         # Debugging. Will print the JSON incoming payload and unpack the converted dictionary
         #main_logger.debug("Receive: msg on subscribed topic: {0} with payload: {1}".format(msg.topic, str(msg.payload))) 
         #main_logger.debug("Incoming msg converted (JSON->Dictionary) and unpacking")
@@ -165,14 +162,14 @@ if __name__ == "__main__":
     t0 = perf_counter() # Need to update interval in  node-red dashboard to link to perf_counter 
     try:
         while True:
-            motor.step(mqttControlsD, mqttInterval) # Pass instructions for stepper motor for testing
+            motor.step(mqttControlsD) # Pass instructions for stepper motor for testing
             if (perf_counter() - t0) > 0.1:
                 stepperdata = motor.getdata()
                 if stepperdata != "na":
                     mqtt_client.publish(MQTT_PUB_TOPIC1, json.dumps(stepperdata))
-                if stepreset:
+                if mqttstepreset:
                     motor.resetsteps()
-                    stepreset = False
+                    mqttstepreset = False
                     mqtt_client.publish(MQTT_PUB_TOPIC2, "resetstepgauge")
                 t0 = perf_counter()
     except KeyboardInterrupt:
