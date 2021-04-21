@@ -78,9 +78,9 @@ if __name__ == "__main__":
     MQTT_PUB_TOPIC2 = 'pi2nred/nredZCMD/resetstepgauge'
 
     # Initialize on_message array/variables. From here on will be updated by node-red gui thru user input. Main controller for stepper motors.
-    mqttstepreset = False   # used to reset steps thru nodered gui
+    mqtt_stepreset = False   # used to reset steps thru nodered gui
     outgoingD = {}          # container for decoding mqtt json payload
-    mqttControlsD = {"delay":[0.8,1.0], "speed":[2,2], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
+    mqtt_controlsD = {"delay":[0.8,1.0], "speed":[2,2], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
     incomingID = ["entire msg", "lvl2", "lvl3", "datatype"]  # break mqtt topic into levels: lvl1/lvl2/lvl3
     
     mqtt_client = mqtt.Client(MQTT_CLIENT_ID) # Create mqtt_client object
@@ -101,15 +101,15 @@ if __name__ == "__main__":
 
     def on_message(client, userdata, msg):
         """on message callback will receive messages from the server/broker. Must be subscribed to the topic in on_connect"""
-        global incomingID, mqttControlsD, mqttstepreset
+        global incomingID, mqtt_controlsD, mqtt_stepreset
         msgmatch = re.match(MQTT_REGEX, msg.topic)   # Check for match to subscribed topics
         if msgmatch:
             incomingD = json.loads(str(msg.payload.decode("utf-8", "ignore"))) 
             incomingID = [msgmatch.group(0), msgmatch.group(1), msgmatch.group(2), type(incomingD)] # breaks msg topic into groups - group/group1/group2
             if incomingID[2] == 'controls':
-                mqttControlsD = incomingD
+                mqtt_controlsD = incomingD
             elif incomingID[2] == 'stepreset':
-                mqttstepreset = incomingD
+                mqtt_stepreset = incomingD
         # Debugging. Will print the JSON incoming payload and unpack the converted dictionary
         #main_logger.debug("Receive: msg on subscribed topic: {0} with payload: {1}".format(msg.topic, str(msg.payload))) 
         #main_logger.debug("Incoming msg converted (JSON->Dictionary) and unpacking")
@@ -165,7 +165,7 @@ if __name__ == "__main__":
     
     try:
         while True:
-            motor.step(mqttControlsD) # Pass instructions for stepper motor for testing
+            motor.step(mqtt_controlsD) # Pass instructions for stepper motor for testing
             t0main_ns = perf_counter_ns() - t0loop_ns
             t0loop_ns = perf_counter_ns()
             if (perf_counter() - t0_sec) > msginterval:
@@ -173,9 +173,9 @@ if __name__ == "__main__":
                 if stepperdata != "na":
                     stepperdata["main_msf"] = t0main_ns/1000000
                     mqtt_client.publish(MQTT_PUB_TOPIC1, json.dumps(stepperdata))
-                if mqttstepreset:
+                if mqtt_stepreset:
                     motor.resetsteps()
-                    mqttstepreset = False
+                    mqtt_stepreset = False
                     mqtt_client.publish(MQTT_PUB_TOPIC2, "resetstepgauge")
                 t0_sec = perf_counter()
     except KeyboardInterrupt:
