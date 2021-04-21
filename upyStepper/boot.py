@@ -8,7 +8,7 @@ import esp
 import re
 from machine import Pin, Timer
 import ujson
-from uMstep28byjuln2003B import Stepper
+from uMstep28byjuln2003 import Stepper
 esp.osdebug(None)
 import gc
 gc.collect()
@@ -37,7 +37,7 @@ WIFI_PASSWORD = stem[3]
 # cpuMHz, controlsD, interval, stepresetare are updated in mqtt on_message
 cpuMHz = 240000000 # Can use 160000000 or 80000000 to drop power consumption by 10-20mA (almost 50%)
 interval = [97,97]
-controlsD={"delay":[0.1,0.3], "speed":[3,3], "mode":[0,0], "inverse":[False,False], "step":[2038,2038], "startstep":[0,0]}
+controlsD={"delay":[0.1,0.3], "speed":[2,2], "mode":[0,0], "inverse":[False,True], "step":[2038,2038], "startstep":[0,0]}
 stepreset = False    # used to reset steps thru nodered gui
 incomingID = ["entire msg", "lvl2", "lvl3", "datatype"]
 outgoingD = {'motor0i':0, 'motor1i':0}  # need both motors initialized for nodered function
