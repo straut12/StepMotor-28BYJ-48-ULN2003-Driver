@@ -75,6 +75,7 @@ if __name__ == "__main__":
     #MQTT_SUB_TOPIC.append('nred2pi/servoZCMD/+')
     MQTT_REGEX = r'nred2pi/([^/]+)/([^/]+)'
     MQTT_PUB_TOPIC1 = 'pi2nred/stepperZDATA/motordata'
+    MQTT_PUB_TOPIC1 = 'pi2nred/stepperZDATA/pi0-data'
     MQTT_PUB_TOPIC2 = 'pi2nred/nredZCMD/resetstepgauge'
 
     # Initialize on_message array/variables. From here on will be updated by node-red gui thru user input. Main controller for stepper motors.
