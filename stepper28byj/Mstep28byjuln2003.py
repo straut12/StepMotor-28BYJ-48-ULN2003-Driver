@@ -202,8 +202,8 @@ class Stepper:   # command comes from node-red GUI
             self.getdataD['looptime'+ str(i) + 'f'] = self.timems[i]
             self.getdataD['speed'+ str(i) + 'i'] = self.command["speed"][i]
         self.getdataD['delayf'] = self.delay
-        f = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
-        self.getdataD['cpufreqi'] = int(int(f.read()) / 1000)
+        f0 = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
+        self.getdataD['cpufreq0i'] = int(int(f0.read()) / 1000)
         return self.getdataD
 
     def resetsteps(self):
