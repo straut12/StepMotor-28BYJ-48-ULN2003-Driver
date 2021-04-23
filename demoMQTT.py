@@ -52,9 +52,14 @@ if __name__ == "__main__":
         main_logger.addHandler(exp_errors_file_handler)
         return main_logger
     
-    #logging.basicConfig(level=logging.DEBUG) # Too many debug output lines. Need to use file logging with RotatingFileHandler instead of basicConfig.
-    main_logger = setup_logging(path.dirname(path.abspath(__file__)))
-    main_logger.info("setup logging module")
+    # Can comment/uncomment to switch between the two methods of logging
+    #basicConfig root logger
+    #logging.basicConfig(level=logging.INFO)                      # Can comment/uncomment to switch
+    #logging.info("Setup with basicConfig root logger")
+
+    # getLogger (includes file logging)
+    logging = setup_logging(path.dirname(path.abspath(__file__)))  # Can comment/uncomment to switch
+    logging.info("Setup with getLogger console/file logging module") 
     
     #====   SETUP MQTT =================#
     # Get login info and setup subscribe/publish topics (receiving/sending messages)
@@ -69,14 +74,17 @@ if __name__ == "__main__":
     MQTT_SERVER = '10.0.0.115'                    # Replace with IP address of device running mqtt server/broker
     MQTT_USER = user_info[0]                      # Replace with your mqtt user ID
     MQTT_PASSWORD = user_info[1]                  # Replace with your mqtt password
-    MQTT_CLIENT_ID = 'pi4'
+
+    MQTT_CLIENT_ID = 'RPi4Uncom'
+    #MQTT_CLIENT_ID = 'RPi3AP'
+
     MQTT_SUB_TOPIC = []          # + is wildcard for that level
     MQTT_SUB_TOPIC.append('nred2pi/stepperZCMD/+')
     #MQTT_SUB_TOPIC.append('nred2pi/servoZCMD/+')
     MQTT_REGEX = r'nred2pi/([^/]+)/([^/]+)'
-    #MQTT_PUB_TOPIC1 = 'pi2nred/stepperZDATA/motordata'
-    #MQTT_PUB_TOPIC1 = 'pi2nred/stepperZDATA/pi0-data'
-    MQTT_PUB_TOPIC1 = 'pi2nred/stepperZDATA/pi3ap-data'
+    
+    MQTT_PUB_TOPIC = 'pi2nred/stepper/'
+    MQTT_PUB_TOPIC1 = MQTT_PUB_TOPIC + MQTT_CLIENT_ID
     MQTT_PUB_TOPIC2 = 'pi2nred/nredZCMD/resetstepgauge'
 
     # Initialize on_message array/variables. From here on will be updated by node-red gui thru user input. Main controller for stepper motors.
@@ -89,21 +97,21 @@ if __name__ == "__main__":
     
     def on_connect(client, userdata, flags, rc):
         """ on connect callback verifies a connection established and subscribe to TOPICs"""
-        global MQTT_SUB_TOPIC
-        main_logger.info("attempting on_connect")
+        logging.info("attempting on_connect")
         if rc==0:
             mqtt_client.connected = True
             for topic in MQTT_SUB_TOPIC:
                 client.subscribe(topic)
-                main_logger.info("Subscribed to: {0}\n".format(topic))
-            main_logger.info("Successful Connection: {0}".format(str(rc)))
+                logging.info("Subscribed to: {0}\n".format(topic))
+            logging.info("Successful Connection: {0}".format(str(rc)))
         else:
             mqtt_client.failed_connection = True  # If rc != 0 then failed to connect. Set flag to stop mqtt loop
-            main_logger.info("Unsuccessful Connection - Code {0}".format(str(rc)))
+            logging.info("Unsuccessful Connection - Code {0}".format(str(rc)))
 
     def on_message(client, userdata, msg):
         """on message callback will receive messages from the server/broker. Must be subscribed to the topic in on_connect"""
-        global incomingID, mqtt_controlsD, mqtt_stepreset
+        global mqtt_controlsD, mqtt_stepreset
+        logging.debug("Received: {0} with payload: {1}".format(msg.topic, str(msg.payload)))
         msgmatch = re.match(MQTT_REGEX, msg.topic)   # Check for match to subscribed topics
         if msgmatch:
             incomingD = json.loads(str(msg.payload.decode("utf-8", "ignore"))) 
@@ -112,24 +120,31 @@ if __name__ == "__main__":
                 mqtt_controlsD = incomingD
             elif incomingID[2] == 'stepreset':
                 mqtt_stepreset = incomingD
-        # Debugging. Will print the JSON incoming payload and unpack the converted dictionary
-        #main_logger.debug("Receive: msg on subscribed topic: {0} with payload: {1}".format(msg.topic, str(msg.payload))) 
-        #main_logger.debug("Incoming msg converted (JSON->Dictionary) and unpacking")
-        #for key, value in incomingD.items():
-        #    main_logger.debug("{0}:{1}".format(key, value))
+        # Debugging. Will print the JSON incoming payload and unpack it
+        #logging.debug("Topic grp0:{0} grp1:{1} grp2:{2}".format(msgmatch.group(0), msgmatch.group(1), msgmatch.group(2)))
+        #incomingD = json.loads(str(msg.payload.decode("utf-8", "ignore")))
+        #logging.debug("Payload type:{0}".format(type(incomingD)))
+        #if isinstance(incomingD, (str, bool, int, float)):
+        #    logging.debug(incomingD)
+        #elif isinstance(incomingD, list):
+        #    for item in incomingD:
+        #        logging.debug(item)
+        #elif isinstance(incomingD, dict):
+        #    for key, value in incomingD.items():  
+        #        logging.debug("{0}:{1}".format(key, value))
 
     def on_publish(client, userdata, mid):
         """on publish will send data to broker"""
         #Debugging. Will unpack the dictionary and then the converted JSON payload
-        #main_logger.debug("msg ID: " + str(mid)) 
-        #main_logger.debug("Publish: Unpack outgoing dictionary (Will convert dictionary->JSON)")
+        #logging.debug("msg ID: " + str(mid)) 
+        #logging.debug("Publish: Unpack outgoing dictionary (Will convert dictionary->JSON)")
         #for key, value in outgoingD.items():
-        #    main_logger.debug("{0}:{1}".format(key, value))
-        #main_logger.debug("Converted msg published on topic: {0} with JSON payload: {1}\n".format(MQTT_PUB_TOPIC1, json.dumps(outgoingD))) # Uncomment for debugging. Will print the JSON incoming msg
+        #    logging.debug("{0}:{1}".format(key, value))
+        #logging.debug("Converted msg published on topic: {0} with JSON payload: {1}\n".format(MQTT_PUB_TOPIC1, json.dumps(outgoingD))) # Uncomment for debugging. Will print the JSON incoming msg
         pass 
 
     def on_disconnect(client, userdata,rc=0):
-        main_logger.debug("DisConnected result code "+str(rc))
+        logging.debug("DisConnected result code "+str(rc))
         mqtt_client.loop_stop()
 
     #==== HARDWARE SETUP ===============# 
@@ -181,7 +196,7 @@ if __name__ == "__main__":
                     mqtt_client.publish(MQTT_PUB_TOPIC2, "resetstepgauge")
                 t0_sec = perf_counter()
     except KeyboardInterrupt:
-        main_logger.info("Pressed ctrl-C")
+        logging.info("Pressed ctrl-C")
     finally:
         motor.cleanupGPIO()
-        main_logger.info("GPIO cleaned up")
+        logging.info("GPIO cleaned up")

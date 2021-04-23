@@ -227,11 +227,11 @@ My workflow
 If working with venv inside vscode make sure and select the venv Python interpreter in bottom left.
 
 RPi has minimal requirements. Paho-mqtt for mqtt and RPi.GPIO for sending pulses.  
-exampleMQTT.py  (script)  
+demoMQTT.py  (script)  
 /stepper28byj  
 |    |-Mstep28byjuln2003.py (stepper module)  
 
-Code Sections in main script exampleMQTT.py
+Code Sections in main script demoMQTT.py
 1. Logging/debugging control set with level
 DEBUG (variables+status prints)
 INFO (status prints)
