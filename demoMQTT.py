@@ -93,6 +93,12 @@ if __name__ == "__main__":
     mqtt_controlsD = {"delay":[0.8,1.0], "speed":[2,2], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
     incomingID = ["entire msg", "lvl2", "lvl3", "datatype"]  # break mqtt topic into levels: lvl1/lvl2/lvl3
     
+    #==== HARDWARE SETUP ===============# 
+    
+    m1pins = [12, 16, 20, 21]
+    m2pins = [19, 13, 6, 5]
+    motor = stepper28byj.Stepper(m1pins, m2pins)  # can enter 1 to 2 list of pins (up to 2 motors)
+    
     mqtt_client = mqtt.Client(MQTT_CLIENT_ID) # Create mqtt_client object
     
     def on_connect(client, userdata, flags, rc):
@@ -146,12 +152,6 @@ if __name__ == "__main__":
     def on_disconnect(client, userdata,rc=0):
         logging.debug("DisConnected result code "+str(rc))
         mqtt_client.loop_stop()
-
-    #==== HARDWARE SETUP ===============# 
-    
-    m1pins = [12, 16, 20, 21]
-    m2pins = [19, 13, 6, 5]
-    motor = stepper28byj.Stepper(m1pins, m2pins)  # can enter 1 to 2 list of pins (up to 2 motors)
     
     #==== MAIN LOOP ====================#
     # Start/bind mqtt functions

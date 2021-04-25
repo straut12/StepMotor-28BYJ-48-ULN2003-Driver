@@ -11,7 +11,7 @@ Motor1
 IN1,2,3,4
 
 """
-from machine import Pin, Timer, freq
+from machine import Pin, Timer
 from time import sleep_us
 #from time import time
 import utime, uos
@@ -48,6 +48,7 @@ class Stepper:   # command comes from node-red GUI
         self.rpmsteps0 = [0, 0]
         self.rpm = [0,0]
         self.seq = [0,0]
+        self.stepperstats = {}   # Container for sending stepper stats
         self.delay = 0   # Keep track of total delay/pause after sending pulses to motors
         self.closefile = False
         self.timem = [utime.ticks_us(), utime.ticks_us()] # monitor how long each motor loop takes (coil logic only)
@@ -71,14 +72,13 @@ class Stepper:   # command comes from node-red GUI
                                             [0,0,1,1]
                                             ]
 
-    def step(self, controls, interval):
+    def step(self, controls):
         ''' LOOP THRU EACH STEPPER AND THE TWO ROTATIONS (CW/CCW) AND SEND COIL ARRAY (HIGH PULSES) '''
         if self.logfile: self.f.write("ENTIRE LOOP,{0}\n".format(utime.ticks_diff(utime.ticks_us(), self.tloop))) ################ 
         if self.logfile: self.tloop = utime.ticks_us() ##################
         if self.closefile:
             self._closefile()
         self.command = controls
-        self.interval = interval
         for i in range(self.numbermotors):
             self.timem[i] = utime.ticks_us() # time counter for monitoring how long the loop takes
             if self.logfile: t0 = utime.ticks_us() ##################
@@ -163,9 +163,12 @@ class Stepper:   # command comes from node-red GUI
                 self.rpm[i] = rpm
             self.rpmsteps0[i] = self.steppersteps[i] # reset rpm counters for next calculation
             self.rpmtime0[i] = utime.ticks_us()
-        if self.logconsoleRPM: print("m0rpm: {0} m1rpm: {1}".format(self.rpm[0], self.rpm[1]))
-        cpufreq = int(freq()/1000000)
-        return self.steppersteps, self.rpm, self.timems, cpufreq, self.command["speed"], self.delay
+            self.stepperstats['steps' + str(i) + 'i'] = self.stepdata[i]
+            self.stepperstats['rpm' + str(i) + 'f'] = self.rpm[i]
+            self.stepperstats['looptime' + str(i) + 'f'] = self.looptime[i]
+            self.stepperstats['speed' + str(i) + 'i'] = self.command["speed"][i]
+            self.stepperstats['delayf'] = self.delay
+        return self.stepperstats
 
     def resetsteps(self):
         ''' Reset the step counters on all motors '''
