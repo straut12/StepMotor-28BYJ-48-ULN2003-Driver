@@ -89,6 +89,7 @@ while True:
             if stepreset:  # If step reset trigger received from node red dashboard then reset the steps and reply with command for node red to reset gauge
                       motor.resetsteps()
                       stepreset = False
+                      #b'esp2nred/nredZCMD/resetstepgauge'
                       mqtt_client.publish(MQTT_PUB_TOPIC2, "resetstepgauge")
             checkmsgs = False       
         if checkdata:
@@ -104,6 +105,7 @@ while True:
                 outgoingD['main_msf'] = t0main_us / 1000
             checkdata = False
         if sendmsgs:
+            #b'esp2nred/stepperZDATA/motordata'
             mqtt_client.publish(MQTT_PUB_TOPIC1, ujson.dumps(outgoingD)) # Send motor data (steps, rpm, etc) back to node-red dashboard
             sendmsgs = False
     except OSError as e:

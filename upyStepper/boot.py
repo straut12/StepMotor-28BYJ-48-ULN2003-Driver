@@ -44,8 +44,8 @@ incomingID = ["entire msg", "lvl2", "lvl3", "datatype"]
 outgoingD = {'motor0i':0, 'motor1i':0}  # need both motors initialized for nodered function
 
 #==== HARDWARE SETUP ====#
-m1pins = [5,18,19,21]
-m2pins = [27,14,12,13]
+m1pins = [14,27,26,25]
+m2pins = [12,13,22,23]
 numbermotors = 2
 motor = Stepper(m1pins, m2pins, numbermotors, cpuMHz)
 

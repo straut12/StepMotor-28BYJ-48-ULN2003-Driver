@@ -80,7 +80,7 @@ class Stepper:   # command comes from node-red GUI
         self.delay = 0   # Container to store loop delay
         self.timens = []  # monitor how long each motor loop takes (coil logic only)
         self.timems = [] # monitor how long each motor loop takes (coil logic + delay)
-        self.getdataD = {}
+        self.stepperstats = {}
         
         for i in range(len(self.mach.stepper)):          # Setup each stepper motor
             self.mach.stepper[i].speed[2] = [0,0,0,0]    # Speed 2 is hard coded as stop
@@ -197,14 +197,14 @@ class Stepper:   # command comes from node-red GUI
                 self.rpm[i] = rpm
             self.rpmsteps0[i] = self.mach.stepper[i].step
             self.rpmtime0[i] = perf_counter_ns()
-            self.getdataD['steps' + str(i) + 'i'] = self.mach.stepper[i].step
-            self.getdataD['rpm'+ str(i) + 'f'] = self.rpm[i]
-            self.getdataD['looptime'+ str(i) + 'f'] = self.timems[i]
-            self.getdataD['speed'+ str(i) + 'i'] = self.command["speed"][i]
-        self.getdataD['delayf'] = self.delay
-        f = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
-        self.getdataD['cpufreqi'] = int(int(f.read()) / 1000)
-        return self.getdataD
+            self.stepperstats['steps' + str(i) + 'i'] = self.mach.stepper[i].step
+            self.stepperstats['rpm'+ str(i) + 'f'] = self.rpm[i]
+            self.stepperstats['looptime'+ str(i) + 'f'] = self.timems[i]
+            self.stepperstats['speed'+ str(i) + 'i'] = self.command["speed"][i]
+        self.stepperstats['delayf'] = self.delay
+        f0 = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
+        self.stepperstats['cpufreq0i'] = int(int(f0.read()) / 1000)
+        return self.stepperstats
 
     def resetsteps(self):
         for i in range(len(self.mach.stepper)):
