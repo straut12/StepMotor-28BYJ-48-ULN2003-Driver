@@ -131,7 +131,7 @@ class Stepper:   # command comes from node-red GUI
                     if self.logconsole: self._printdebug(i, "4:DONE INCREMNT")
                     self.startstepping[i] = False
 
-            if self.logfile: self.f.write("increment-mode-logic,{0}\n".format(utime.ticks_diff(utime.ticks_us(), t0))) #######
+            if self.logfile: self.f.write("increment-mode-logic,{0}\n".format(utime.ticks_diff(utime.ticks_us()  , t0))) #######
             if self.logfile: t0 = utime.ticks_us() ##################
 
 
