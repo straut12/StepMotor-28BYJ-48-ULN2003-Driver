@@ -230,6 +230,7 @@ def main():
     global deviceD, printcolor      # Containers setup in 'create' functions and used for Publishing mqtt
     global MQTT_SERVER, MQTT_USER, MQTT_PASSWORD, MQTT_CLIENT_ID, mqtt_client, MQTT_PUB_LVL1
     global _loggers, main_logger, mqtt_logger
+    global mqtt_controlsD, mqtt_stepreset  # Variables for stepper mqtt control
 
     main_logger_level= logging.DEBUG # CRITICAL=logging off. DEBUG=get variables. INFO=status messages.
     main_logger_type = 'custom'       # 'basic' or 'custom' (with option for log files)
@@ -246,7 +247,7 @@ def main():
     
     _loggers = [] # container to keep track of loggers created
     main_logger = setup_logging(path.dirname(path.abspath(__file__)), main_logger_type, log_level=main_logger_level, mode=RFHmode)
-    mqtt_logger = setup_logging(path.dirname(path.abspath(__file__)), 'custom', 'mqtt', log_level=logging.INFO, mode=1)
+    mqtt_logger = setup_logging(path.dirname(path.abspath(__file__)), 'custom', 'mqtt', log_level=logging.DEBUG, mode=1)
 
     MQTT_CLIENT_ID = 'pi' # Can make ID unique if multiple Pi's could be running similar devices (ie servos, ADC's) 
                           # Node red will need to be linked to unique MQTT_CLIENT_ID
@@ -260,14 +261,23 @@ def main():
     device = 'stepper'
     lvl2 = 'stepper'
     publvl3 = MQTT_CLIENT_ID + ""
-    MQTT_PUB_NRED_RESET_GAUGES = 'pi2nred/nredZCMD/resetstepgauge'     # Extra topic used to tell node red to reset the step gauges
-    data_keys = ['delayf', 'cpufreq0i', 'looptime0f', 'looptime1f', 'steps0i', 'steps1i', 'rpm0f', 'rpm1f', 'speed0i', 'speed1i']
+    data_keys = ['delayf', 'cpufreq0i', 'main_msf', 'looptime0f', 'looptime1f', 'steps0i', 'steps1i', 'rpm0f', 'rpm1f', 'speed0i', 'speed1i']
     m1pins = [12, 16, 20, 21]
     m2pins = [19, 13, 6, 5]
     mqtt_stepreset = False   # used to reset steps thru nodered gui
     mqtt_controlsD = {"delay":[0.8,1.0], "speed":[3,3], "mode":[0,0], "inverse":[False,True], "step":[2038, 2038], "startstep":[0,0]}
     setup_device(device, lvl2, publvl3, data_keys)
+    deviceD[device]['pubtopic2'] = f"{MQTT_SUB_LVL1}/nredZCMD/resetstepgauge" # Extra topic used to tell node red to reset the step gauges
+    deviceD[device]['data2'] = "resetstepgauge"
     motor = stepper28byj.Stepper(m1pins, m2pins, logger=logger_stepper)  # can enter 1 to 2 list of pins (up to 2 motors)
+
+    main_logger.info("ALL DICTIONARIES")
+    for device, item in deviceD.items():
+        main_logger.info(device)
+        if isinstance(item, dict):
+            for key in item:
+                main_logger.info("\t{0}:{1}".format(key, item[key]))
+        else: main_logger.info("\t{0}".format(item))
 
     print("\n")
     for logger in _loggers:
@@ -315,7 +325,7 @@ def main():
                 if mqtt_stepreset:
                     motor.resetsteps()
                     mqtt_stepreset = False
-                    mqtt_client.publish(MQTT_PUB_NRED_RESET_GAUGES, "resetstepgauge")
+                    mqtt_client.publish(deviceD['stepper']['pubtopic2'], json.dumps(deviceD['stepper']['data2']))
                 t0_sec = perf_counter()
     except KeyboardInterrupt:
         logging.info("Pressed ctrl-C")
