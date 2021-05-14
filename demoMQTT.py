@@ -313,20 +313,21 @@ def main():
 
     try:
         while True:
-            motor_controls = mqtt_controlsD
-            motor.step(motor_controls) # Pass instructions for stepper motor for testing
             t0main_ns = perf_counter_ns() - t0loop_ns
             t0loop_ns = perf_counter_ns()
             if (perf_counter() - t0_sec) > msginterval:
                 deviceD['stepper']['data'] = motor.getdata()
                 if deviceD['stepper']['data'] != "na":
-                    deviceD['stepper']['data']["main_msf"] = t0main_ns/1000000
+                    deviceD['stepper']['data']["main_msf"] = t0main_ns/1000000  # Monitor the main/total loop time
                     mqtt_client.publish(deviceD['stepper']['pubtopic'], json.dumps(deviceD['stepper']['data'])) 
                 if mqtt_stepreset:
                     motor.resetsteps()
                     mqtt_stepreset = False
                     mqtt_client.publish(deviceD['stepper']['pubtopic2'], json.dumps(deviceD['stepper']['data2']))
                 t0_sec = perf_counter()
+            
+            motor_controls = mqtt_controlsD  # Get updated motor controls from mqtt. Could change this to another source
+            motor.step(motor_controls) # Pass instructions for stepper motor for testing
     except KeyboardInterrupt:
         logging.info("Pressed ctrl-C")
     finally:
