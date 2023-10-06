@@ -1,13 +1,10 @@
 <link rel="stylesheet" href="./images/sj4u.css"></link>
 
-# [STEM Just 4 U Home Page](https://stemjust4u.com/)
-## This project involves operating a 28BYJ-48 stepper motor with a ULN2003 driver board and RPi/esp32 
-
+## Outline
+This project involves operating a 28BYJ-48 stepper motor with a ULN2003 driver board and RPi/esp32  
 The 28BYJ-48 is a slower motor (max rpm ~15-20) but provides more precision and control compared to a regular DC motor. They are brushless, having a cogged wheel and four electromagnets. In your code you only have to send a HIGH signal to energize the coils. The electromagnet will attract the nearest teeth of the wheel driving the motor one step. However getting the correct sequence of pulses to turn the electromagnets on in a specific order is important.
 
 Motor is controlled using mqtt via node-red dashboard.
-
-[Link to Stepper Project Web Site](https://stemjust4u.com/steppermotor)  
 
 ![StepperMotor](images/28byjuln2003.png#200x-150y-5rad)
 
@@ -298,6 +295,3 @@ Node red flows are in github node red folder.
 I started with a simple dashboard that set the delay (ms), speed (half vs full step) and a START/STOP. Then added gauges for setup below.
 
 ![StepperMotor](images/nodered-dashboard2.gif#500x-300y)
-
-
-[Link to MQTT-Node-Red Setup](https://stemjust4u.com/mqtt-influxdb-nodered-grafana)  
